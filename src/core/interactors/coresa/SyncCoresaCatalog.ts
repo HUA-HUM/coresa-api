@@ -4,6 +4,10 @@ import {
   ICoresaRepositoryToken,
 } from '../../adapters/repositories/ICoresaRepository';
 import {
+  IExchangeRateRepository,
+  IExchangeRateRepositoryToken,
+} from '../../adapters/repositories/IExchangeRateRepository';
+import {
   IInternalApiRepository,
   IInternalApiRepositoryToken,
 } from '../../adapters/repositories/IInternalApiRepository';
@@ -15,6 +19,7 @@ import { ActiveMeliListing } from '../../entities/ActiveMeliListing';
 import { BrandCatalog } from '../../entities/BrandCatalog';
 import { CoresaProduct } from '../../entities/CoresaProduct';
 import { isActiveMeliStatus } from '../../entities/InternalMeliProduct';
+import { getMeliSellerId } from '../../utils/coresaPriceStock';
 import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
 import { SyncCoresaProductsToInternalApi } from './SyncCoresaProductsToInternalApi';
 
@@ -29,6 +34,8 @@ export class SyncCoresaCatalog {
     private readonly internalApi: IInternalApiRepository,
     @Inject(IMercadoLibreRepositoryToken)
     private readonly mercadoLibreRepo: IMercadoLibreRepository,
+    @Inject(IExchangeRateRepositoryToken)
+    private readonly exchangeRate: IExchangeRateRepository,
     private readonly syncInternal: SyncCoresaProductsToInternalApi,
   ) {}
 
@@ -40,6 +47,7 @@ export class SyncCoresaCatalog {
     total: number;
     brands: BrandCatalog[];
     activeForMeli: number;
+    upserted: number;
     meliItemIdsSample: string[];
   }> {
     const products = await this.coresaRepo.getAllProducts();
@@ -51,13 +59,21 @@ export class SyncCoresaCatalog {
         .join(', ')}`,
     );
 
-    const activeForMeli = await this.classifyActiveForMeli(products);
+    const [usdBna, activeForMeli] = await Promise.all([
+      this.exchangeRate.getUsdBnaSell(),
+      this.classifyActiveForMeli(products),
+    ]);
 
+    this.logger.log(`[Coresa] USD BNA venta: ${usdBna}`);
     this.logger.log(
-      `[Coresa] ${activeForMeli.length} publicaciones ML activas (meli-api pendiente)`,
+      `[Coresa] ${activeForMeli.length} publicaciones ML activas`,
     );
 
-    await this.syncInternal.execute(products);
+    const upserted = await this.syncInternal.execute(
+      activeForMeli,
+      usdBna,
+      getMeliSellerId(),
+    );
 
     // Listo para pegarle a meli-api:
     // await this.mercadoLibreRepo.updateListings(activeForMeli);
@@ -66,6 +82,7 @@ export class SyncCoresaCatalog {
       total: products.length,
       brands,
       activeForMeli: activeForMeli.length,
+      upserted,
       meliItemIdsSample: activeForMeli
         .slice(0, 20)
         .map((item) => item.meli_item_id),
@@ -88,9 +105,11 @@ export class SyncCoresaCatalog {
         try {
           const internal = await this.internalApi.getProductBySku(sku);
           if (!internal || !isActiveMeliStatus(internal.status)) return null;
+          const meli_item_id = String(internal.meli_item_id ?? '').trim();
+          if (!meli_item_id) return null;
           return {
             product,
-            meli_item_id: internal.meli_item_id ?? '',
+            meli_item_id,
           };
         } catch (err) {
           this.logger.warn(

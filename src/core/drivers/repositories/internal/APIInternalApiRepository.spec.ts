@@ -20,13 +20,24 @@ describe('APIInternalApiRepository', () => {
     const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
     const repo = new APIInternalApiRepository({ request } as never);
 
-    await repo.upsertProducts([{ SKU: 'MFTBLP2' }]);
+    const product = {
+      meli_item_id: 'MLA123',
+      seller_id: '6863691',
+      sku: 'MFTBLP2',
+      title: 'Producto ejemplo',
+      price: 95000,
+      available_quantity: 12,
+      status: 'active',
+      raw_payload: {},
+    };
+
+    await repo.upsertProducts([product]);
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',
         url: 'https://internal.example.com/internal/mercadolibre/products/bulk',
-        data: { products: [{ SKU: 'MFTBLP2' }] },
+        data: { products: [product] },
         headers: expect.objectContaining({
           'x-api-key': '_internal',
           'x-internal-api-key': '_internal',
@@ -48,6 +59,11 @@ describe('APIInternalApiRepository', () => {
       expect.objectContaining({
         method: 'GET',
         url: 'https://internal.example.com/internal/mercadolibre/products/by-sku/MFTBLP2',
+        params: {},
+        headers: expect.objectContaining({
+          'x-api-key': '_internal',
+          'x-internal-api-key': '_internal',
+        }),
       }),
     );
     expect(product).toEqual({
@@ -67,4 +83,14 @@ describe('APIInternalApiRepository', () => {
 
     await expect(repo.getProductBySku('MISSING')).resolves.toBeNull();
   });
+
+  it('no llama al /bulk si no hay productos', async () => {
+    const request = jest.fn();
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await repo.upsertProducts([]);
+
+    expect(request).not.toHaveBeenCalled();
+  });
 });
+

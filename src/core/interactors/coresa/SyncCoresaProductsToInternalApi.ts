@@ -1,9 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { CoresaProduct } from '../../entities/CoresaProduct';
+import { ActiveMeliListing } from '../../entities/ActiveMeliListing';
+import { InternalMeliBulkProduct } from '../../entities/InternalMeliBulkProduct';
 import {
   IInternalApiRepository,
   IInternalApiRepositoryToken,
 } from '../../adapters/repositories/IInternalApiRepository';
+import {
+  getDiscountPercent,
+  mapListingToBulkProduct,
+} from '../../utils/coresaPriceStock';
 
 @Injectable()
 export class SyncCoresaProductsToInternalApi {
@@ -14,10 +19,35 @@ export class SyncCoresaProductsToInternalApi {
     private readonly internalApi: IInternalApiRepository,
   ) {}
 
-  async execute(products: CoresaProduct[]): Promise<void> {
+  async execute(
+    listings: ActiveMeliListing[],
+    usdBna: number,
+    sellerId: string,
+  ): Promise<number> {
+    const discountPercent = getDiscountPercent();
+    const products: InternalMeliBulkProduct[] = [];
+
+    for (const listing of listings) {
+      const mapped = mapListingToBulkProduct(
+        listing,
+        usdBna,
+        sellerId,
+        discountPercent,
+      );
+      if (!mapped) {
+        const sku = String(listing.product.SKU ?? '').trim() || '(sin SKU)';
+        this.logger.warn(
+          `[internal-api] SKU ${sku} sin MLA o precio válido, se omite`,
+        );
+        continue;
+      }
+      products.push(mapped);
+    }
+
     await this.internalApi.upsertProducts(products);
     this.logger.log(
-      `[internal-api] upsert de ${products.length} productos Coresa.`,
+      `[internal-api] upsert de ${products.length} publicaciones ML (BNA ${usdBna}, desc ${discountPercent}%).`,
     );
+    return products.length;
   }
 }

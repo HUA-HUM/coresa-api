@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { CoresaProduct } from '../../../entities/CoresaProduct';
+import { InternalMeliBulkProduct } from '../../../entities/InternalMeliBulkProduct';
 import {
   InternalMeliProduct,
   mapInternalMeliProduct,
@@ -26,30 +26,71 @@ export class APIInternalApiRepository {
     return Number(process.env.INTERNAL_API_CHUNK_SIZE ?? 500);
   }
 
-  private headers(): Record<string, string> {
+  private get requestRetries(): number {
+    return Number(process.env.INTERNAL_API_RETRIES ?? 2);
+  }
+
+  private isTransientNetworkError(err: unknown): boolean {
+    if (!axios.isAxiosError(err) || err.response) return false;
+    const code = String(err.code ?? '');
+    const causeCode = String(
+      (err.cause as { code?: string } | undefined)?.code ?? '',
+    );
+    const transient = new Set([
+      'ECONNRESET',
+      'ECONNABORTED',
+      'EPIPE',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+    ]);
+    return (
+      transient.has(code) ||
+      transient.has(causeCode) ||
+      Boolean(
+        (err.request as { reusedSocket?: boolean } | undefined)?.reusedSocket,
+      )
+    );
+  }
+
+  private async request(config: AxiosRequestConfig) {
+    let lastError: unknown;
+    const attempts = Math.max(1, this.requestRetries + 1);
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return await this.axios.request(config);
+      } catch (err) {
+        lastError = err;
+        if (!this.isTransientNetworkError(err) || attempt === attempts) {
+          throw err;
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private prepareRequest(
+    path: string,
+    query: Record<string, string | number> = {},
+    data?: unknown,
+  ): AxiosRequestConfig {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       accept: '*/*',
+      Connection: 'close',
     };
     if (this.apiKey) {
       headers['x-api-key'] = this.apiKey;
       headers['x-internal-api-key'] = this.apiKey;
     }
-    return headers;
-  }
 
-  private url(path: string): string {
-    const base = this.apiUrl.replace(/\/$/, '');
-    return `${base}${path}`;
-  }
-
-  private prepareRequest(path: string, data: unknown): AxiosRequestConfig {
-    return {
-      method: 'POST',
-      url: this.url(path),
-      headers: this.headers(),
-      data,
+    const config: AxiosRequestConfig = {
+      method: data !== undefined ? 'POST' : 'GET',
+      url: `${this.apiUrl.replace(/\/$/, '')}${path}`,
+      headers,
+      params: query,
     };
+    if (data !== undefined) config.data = data;
+    return config;
   }
 
   private chunk<T>(arr: T[], size: number): T[][] {
@@ -58,15 +99,16 @@ export class APIInternalApiRepository {
     return out;
   }
 
-  async upsertProducts(products: CoresaProduct[]): Promise<void> {
+  async upsertProducts(products: InternalMeliBulkProduct[]): Promise<void> {
+    if (products.length === 0) return;
+
     for (const batch of this.chunk(products, this.chunkSize)) {
       const config = this.prepareRequest(
         '/internal/mercadolibre/products/bulk',
-        {
-          products: batch,
-        },
+        {},
+        { products: batch },
       );
-      const response = await this.axios.request(config);
+      const response = await this.request(config);
       if (response.status < 200 || response.status >= 300) {
         throw new Error(
           `[internal-api] upsert -> ${response.status}: ${JSON.stringify(response.data)}`,
@@ -78,11 +120,10 @@ export class APIInternalApiRepository {
   async getProductBySku(sku: string): Promise<InternalMeliProduct | null> {
     const encoded = encodeURIComponent(sku);
     try {
-      const response = await this.axios.request({
-        method: 'GET',
-        url: this.url(`/internal/mercadolibre/products/by-sku/${encoded}`),
-        headers: this.headers(),
-      });
+      const config = this.prepareRequest(
+        `/internal/mercadolibre/products/by-sku/${encoded}`,
+      );
+      const response = await this.request(config);
       if (response.status === 404) return null;
       if (response.status < 200 || response.status >= 300) {
         throw new Error(

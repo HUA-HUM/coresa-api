@@ -18,25 +18,30 @@ export class APIMeliApiRepository {
     return process.env.MERCADOLIBRE_API_KEY ?? '';
   }
 
-  private prepareRequest(path: string, data: unknown): AxiosRequestConfig {
+  private prepareRequest(
+    path: string,
+    query: Record<string, string | number> = {},
+    data?: unknown,
+  ): AxiosRequestConfig {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (this.apiKey) headers['x-api-key'] = this.apiKey.trim();
 
-    const base = this.apiUrl.replace(/\/$/, '');
-    return {
-      method: 'POST',
-      url: `${base}${path}`,
+    const config: AxiosRequestConfig = {
+      method: data !== undefined ? 'POST' : 'GET',
+      url: `${this.apiUrl.replace(/\/$/, '')}${path}`,
       headers,
-      data,
+      params: query,
     };
+    if (data !== undefined) config.data = data;
+    return config;
   }
 
   async updateListings(items: ActiveMeliListing[]): Promise<void> {
     if (items.length === 0) return;
 
-    const config = this.prepareRequest('/listings/update', {
+    const config = this.prepareRequest('/listings/update', {}, {
       items: items.map((item) => ({
         meli_item_id: item.meli_item_id,
         product: item.product,

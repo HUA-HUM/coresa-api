@@ -12,7 +12,7 @@ export class ProductsCoresaController {
   @Post('sync')
   @ApiOperation({
     summary:
-      'Cron: catálogo Coresa → lookup ML por SKU → upsert DB (todo) y clasifica activos para meli-api',
+      'Cron: catálogo Coresa → lookup ML por SKU → upsert precio/stock ARS de publicaciones active',
   })
   @ApiOkResponse({ description: 'Catálogo sincronizado' })
   async sync() {

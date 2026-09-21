@@ -1,8 +1,8 @@
-import { CoresaProduct } from '../../entities/CoresaProduct';
+import { InternalMeliBulkProduct } from '../../entities/InternalMeliBulkProduct';
 import { InternalMeliProduct } from '../../entities/InternalMeliProduct';
 
 export interface IInternalApiRepository {
-  upsertProducts(products: CoresaProduct[]): Promise<void>;
+  upsertProducts(products: InternalMeliBulkProduct[]): Promise<void>;
   getProductBySku(sku: string): Promise<InternalMeliProduct | null>;
 }
 
