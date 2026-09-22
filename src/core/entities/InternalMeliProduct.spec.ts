@@ -5,7 +5,9 @@ import {
 
 describe('InternalMeliProduct', () => {
   it('mapea meli_item_id, meliItemId, MLA e id', () => {
-    expect(mapInternalMeliProduct({ sku: 'A', status: 'active', MLA: 'MLA1' })).toEqual({
+    expect(
+      mapInternalMeliProduct({ sku: 'A', status: 'active', MLA: 'MLA1' }),
+    ).toEqual({
       sku: 'A',
       status: 'active',
       meli_item_id: 'MLA1',

@@ -71,9 +71,7 @@ describe('coresaPriceStock', () => {
         },
       };
 
-      expect(
-        mapListingToBulkProduct(listing, 1000, '6863691', 50),
-      ).toEqual({
+      expect(mapListingToBulkProduct(listing, 1000, '6863691', 50)).toEqual({
         meli_item_id: 'MLA123',
         seller_id: '6863691',
         sku: 'B0XXXX',
@@ -85,7 +83,11 @@ describe('coresaPriceStock', () => {
       });
 
       expect(
-        mapListingToBulkProduct({ ...listing, meli_item_id: '' }, 1000, '6863691'),
+        mapListingToBulkProduct(
+          { ...listing, meli_item_id: '' },
+          1000,
+          '6863691',
+        ),
       ).toBeNull();
       expect(
         mapListingToBulkProduct(

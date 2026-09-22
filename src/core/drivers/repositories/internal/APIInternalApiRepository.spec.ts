@@ -93,4 +93,3 @@ describe('APIInternalApiRepository', () => {
     expect(request).not.toHaveBeenCalled();
   });
 });
-

@@ -4,7 +4,9 @@ export class InternalMeliProduct {
   meli_item_id: string | null;
 }
 
-export function mapInternalMeliProduct(payload: unknown): InternalMeliProduct | null {
+export function mapInternalMeliProduct(
+  payload: unknown,
+): InternalMeliProduct | null {
   if (!payload || typeof payload !== 'object') return null;
 
   const root = payload as Record<string, unknown>;

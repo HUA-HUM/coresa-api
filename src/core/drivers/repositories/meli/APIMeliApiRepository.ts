@@ -41,12 +41,16 @@ export class APIMeliApiRepository {
   async updateListings(items: ActiveMeliListing[]): Promise<void> {
     if (items.length === 0) return;
 
-    const config = this.prepareRequest('/listings/update', {}, {
-      items: items.map((item) => ({
-        meli_item_id: item.meli_item_id,
-        product: item.product,
-      })),
-    });
+    const config = this.prepareRequest(
+      '/listings/update',
+      {},
+      {
+        items: items.map((item) => ({
+          meli_item_id: item.meli_item_id,
+          product: item.product,
+        })),
+      },
+    );
     const response = await this.axios.request(config);
     if (response.status < 200 || response.status >= 300) {
       throw new Error(

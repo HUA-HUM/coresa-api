@@ -19,11 +19,9 @@ describe('SyncCoresaProductsToInternalApi', () => {
       },
     ];
 
-    const upserted = await new SyncCoresaProductsToInternalApi(internalApi).execute(
-      listings,
-      1000,
-      '6863691',
-    );
+    const upserted = await new SyncCoresaProductsToInternalApi(
+      internalApi,
+    ).execute(listings, 1000, '6863691');
 
     expect(upserted).toBe(1);
     expect(internalApi.upsertProducts).toHaveBeenCalledWith([
@@ -46,10 +44,15 @@ describe('SyncCoresaProductsToInternalApi', () => {
       getProductBySku: jest.fn(),
     };
 
-    const upserted = await new SyncCoresaProductsToInternalApi(internalApi).execute(
+    const upserted = await new SyncCoresaProductsToInternalApi(
+      internalApi,
+    ).execute(
       [
         { meli_item_id: '', product: { SKU: 'NO-MLA', Precio_Lista_1: 100 } },
-        { meli_item_id: 'MLA9', product: { SKU: 'NO-PRICE', Precio_Lista_1: 0 } },
+        {
+          meli_item_id: 'MLA9',
+          product: { SKU: 'NO-PRICE', Precio_Lista_1: 0 },
+        },
       ],
       1000,
       '6863691',
