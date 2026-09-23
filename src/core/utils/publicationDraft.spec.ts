@@ -1,5 +1,9 @@
 import { CoresaProduct } from '../entities/CoresaProduct';
-import { buildPublicationDraft, getGtin } from './publicationDraft';
+import {
+  buildPublicationDraft,
+  getGtin,
+  valueAddedTax,
+} from './publicationDraft';
 
 const product: CoresaProduct = {
   SKU: 'AEB 35 SC/1',
@@ -99,5 +103,99 @@ describe('buildPublicationDraft', () => {
   it('toma el código de barras unitario como GTIN', () => {
     expect(getGtin(product)).toBe('4050118376722');
     expect(getGtin({ ...product, CodBarra_Unitario: undefined })).toBe('');
+  });
+});
+
+describe('atributos de paquete e impuestos', () => {
+  it('agrega los cuatro datos del paquete que pide ML', () => {
+    const draft = buildPublicationDraft({
+      product: {
+        ...product,
+        Alto_cm: 1.8,
+        Ancho_cm: 3.8,
+        Largo_cm: 7.3,
+        Peso_kg: 0.01,
+      },
+      categoryId: 'MLA1591',
+      content,
+      usdBna: 1000,
+      discountPercent: 50,
+      allowedAttributeIds: new Set(['BRAND']),
+    });
+    const ids = draft.attributes.map((attribute) => attribute.id);
+
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'SELLER_PACKAGE_HEIGHT',
+        'SELLER_PACKAGE_WIDTH',
+        'SELLER_PACKAGE_LENGTH',
+        'SELLER_PACKAGE_WEIGHT',
+      ]),
+    );
+  });
+
+  it('redondea las dimensiones para arriba y pasa el peso a gramos', () => {
+    const draft = buildPublicationDraft({
+      product: {
+        ...product,
+        Alto_cm: 1.8,
+        Ancho_cm: 3.8,
+        Largo_cm: 7.3,
+        Peso_kg: 0.01,
+      },
+      categoryId: 'MLA1591',
+      content,
+      usdBna: 1000,
+      discountPercent: 50,
+      allowedAttributeIds: new Set<string>(),
+    });
+    const paquete = Object.fromEntries(
+      draft.attributes.map((attribute) => [attribute.id, attribute.value_name]),
+    );
+
+    expect(paquete.SELLER_PACKAGE_HEIGHT).toBe('2 cm');
+    expect(paquete.SELLER_PACKAGE_WIDTH).toBe('4 cm');
+    expect(paquete.SELLER_PACKAGE_LENGTH).toBe('8 cm');
+    expect(paquete.SELLER_PACKAGE_WEIGHT).toBe('10 g');
+  });
+
+  it('no manda ningún dato de paquete si falta alguno', () => {
+    const draft = buildPublicationDraft({
+      product: { ...product, Peso_kg: 0 },
+      categoryId: 'MLA1591',
+      content,
+      usdBna: 1000,
+      discountPercent: 50,
+      allowedAttributeIds: new Set<string>(),
+    });
+
+    expect(
+      draft.attributes.filter((attribute) =>
+        attribute.id.startsWith('SELLER_PACKAGE'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('traduce el IVA de Coresa al formato de ML', () => {
+    expect(valueAddedTax({ SKU: 'X', Impuestos: 'IVA_21' })).toBe('21 %');
+    expect(valueAddedTax({ SKU: 'X', Impuestos: 'IVA_10.5' })).toBe('10.5 %');
+    expect(valueAddedTax({ SKU: 'X', Impuestos: '' })).toBe('');
+  });
+
+  it('agrega IVA y derecho de importación cuando la categoría los admite', () => {
+    const draft = buildPublicationDraft({
+      product: { ...product, Impuestos: 'IVA_21' },
+      categoryId: 'MLA1591',
+      content,
+      usdBna: 1000,
+      discountPercent: 50,
+      allowedAttributeIds: new Set(['VALUE_ADDED_TAX', 'IMPORT_DUTY']),
+    });
+    const porId = Object.fromEntries(
+      draft.attributes.map((attribute) => [attribute.id, attribute.value_name]),
+    );
+
+    expect(porId.VALUE_ADDED_TAX).toBe('21 %');
+    expect(porId.IMPORT_DUTY).toBe('0 %');
   });
 });

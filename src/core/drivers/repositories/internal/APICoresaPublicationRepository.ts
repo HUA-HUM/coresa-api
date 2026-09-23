@@ -69,6 +69,17 @@ export class APICoresaPublicationRepository {
     return response.data as CoresaPublication;
   }
 
+  async getById(id: number): Promise<CoresaPublication | null> {
+    const config = this.prepareRequest('GET', `${BASE_PATH}/${id}`);
+    try {
+      const response = await this.axios.request(config);
+      return response.data as CoresaPublication;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+      throw err;
+    }
+  }
+
   async getBySku(sku: string): Promise<CoresaPublication | null> {
     const config = this.prepareRequest(
       'GET',

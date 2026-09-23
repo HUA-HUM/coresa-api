@@ -10,6 +10,7 @@ export interface ICoresaPublicationRepository {
     id: number,
     input: UpdateCoresaPublicationInput,
   ): Promise<CoresaPublication>;
+  getById(id: number): Promise<CoresaPublication | null>;
   getBySku(sku: string): Promise<CoresaPublication | null>;
 }
 

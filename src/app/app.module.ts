@@ -21,6 +21,7 @@ import { IMeliPublishRepositoryToken } from '../core/adapters/repositories/IMeli
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories/IProductEnrichmentRepository';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
+import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { SyncCoresaCatalog } from '../core/interactors/coresa/SyncCoresaCatalog';
 import { SyncCoresaProductsToInternalApi } from '../core/interactors/coresa/SyncCoresaProductsToInternalApi';
 
@@ -70,6 +71,7 @@ import { SyncCoresaProductsToInternalApi } from '../core/interactors/coresa/Sync
     SyncCoresaProductsToInternalApi,
     SyncCoresaCatalogProcess,
     PreviewCoresaPublication,
+    PublishCoresaPublication,
   ],
 })
 export class AppModule {}

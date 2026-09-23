@@ -3,6 +3,7 @@ import {
   MeliCategorySuggestion,
 } from '../../entities/MeliCategory';
 import {
+  PublicationCreation,
   PublicationDraft,
   PublicationValidation,
 } from '../../entities/PublicationDraft';
@@ -14,6 +15,8 @@ export interface IMeliPublishRepository {
   ): Promise<MeliCategorySuggestion[]>;
   getCategoryAttributes(categoryId: string): Promise<MeliCategoryAttribute[]>;
   validateItem(draft: PublicationDraft): Promise<PublicationValidation>;
+  createItem(draft: PublicationDraft): Promise<PublicationCreation>;
+  updateDescription(itemId: string, description: string): Promise<void>;
 }
 
 export const IMeliPublishRepositoryToken = Symbol('IMeliPublishRepository');

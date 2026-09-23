@@ -4,6 +4,7 @@ import {
   MeliCategorySuggestion,
 } from '../../../entities/MeliCategory';
 import {
+  PublicationCreation,
   PublicationDraft,
   PublicationValidation,
 } from '../../../entities/PublicationDraft';
@@ -25,9 +26,14 @@ export class APIMeliPublishRepository {
     return url.replace(/\/$/, '');
   }
 
+  /**
+   * Los endpoints de publicación piden x-internal-api-key (el
+   * SOLED_INTERNAL_API_KEY de meli-api), que no es la MERCADOLIBRE_API_KEY
+   * que usan los endpoints viejos de lectura.
+   */
   private get apiKey(): string {
     return String(
-      process.env.MERCADOLIBRE_API_KEY ?? process.env.INTERNAL_API_KEY ?? '',
+      process.env.MELI_API_INTERNAL_KEY ?? process.env.INTERNAL_API_KEY ?? '',
     ).trim();
   }
 
@@ -91,5 +97,26 @@ export class APIMeliPublishRepository {
     );
     const response = await this.axios.request(config);
     return response.data as PublicationValidation;
+  }
+
+  /**
+   * Crea las dos publicaciones (clásica y premium). meli-api nunca reintenta
+   * esta llamada sola, así que tampoco la reintentamos acá: un timeout puede
+   * haber creado el ítem igual.
+   */
+  async createItem(draft: PublicationDraft): Promise<PublicationCreation> {
+    const config = this.prepareRequest('POST', '/meli/items', {}, draft);
+    const response = await this.axios.request(config);
+    return response.data as PublicationCreation;
+  }
+
+  async updateDescription(itemId: string, description: string): Promise<void> {
+    const config = this.prepareRequest(
+      'PUT',
+      `/meli/items/${encodeURIComponent(itemId)}/description`,
+      {},
+      { description },
+    );
+    await this.axios.request(config);
   }
 }

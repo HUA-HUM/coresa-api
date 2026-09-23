@@ -37,3 +37,25 @@ export class PublicationValidation {
   sku: string;
   results: Record<string, ListingValidation>;
 }
+
+/** Resultado de un listing type dentro de POST /meli/items. */
+export class ListingCreation {
+  ok: boolean;
+  conflict?: boolean;
+  meli_item_id?: string;
+  permalink?: string;
+  status?: string;
+  sub_status?: string[];
+  description_saved?: boolean;
+  description_error?: unknown;
+  warnings?: unknown[];
+  error?: unknown;
+}
+
+export class PublicationCreation {
+  sku: string;
+  results: Record<string, ListingCreation>;
+}
+
+export const LISTING_TYPE_CLASSIC = 'gold_special';
+export const LISTING_TYPE_PREMIUM = 'gold_pro';

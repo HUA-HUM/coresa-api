@@ -1,9 +1,27 @@
-import { Body, Controller, Logger, Post } from '@nestjs/common';
-import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Logger,
+  Param,
+  ParseIntPipe,
+  Post,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   PreviewCoresaPublication,
   PreviewCoresaPublicationResult,
 } from '../../../core/interactors/coresa/PreviewCoresaPublication';
+import {
+  PublishCoresaPublication,
+  PublishCoresaPublicationResult,
+} from '../../../core/interactors/coresa/PublishCoresaPublication';
+import { PublicationDraft } from '../../../core/entities/PublicationDraft';
 
 class PreviewPublicationBody {
   sku: string;
@@ -11,12 +29,20 @@ class PreviewPublicationBody {
   categoryId?: string;
 }
 
+class PublishPublicationBody {
+  draft?: Partial<PublicationDraft>;
+  requestedBy?: string;
+}
+
 @ApiTags('Coresa Publications')
 @Controller('coresa/publications')
 export class PublicationsCoresaController {
   private readonly logger = new Logger(PublicationsCoresaController.name);
 
-  constructor(private readonly previewPublication: PreviewCoresaPublication) {}
+  constructor(
+    private readonly previewPublication: PreviewCoresaPublication,
+    private readonly publishPublication: PublishCoresaPublication,
+  ) {}
 
   @Post('preview')
   @ApiOperation({
@@ -40,6 +66,37 @@ export class PublicationsCoresaController {
       sku: body?.sku,
       requestedBy: body?.requestedBy,
       categoryId: body?.categoryId,
+    });
+  }
+
+  @Post(':id/publish')
+  @ApiOperation({
+    summary:
+      'Publica el borrador en ML (clásica y premium) y guarda el resultado en internal-api',
+  })
+  @ApiParam({ name: 'id', example: 123 })
+  @ApiBody({
+    schema: {
+      example: {
+        draft: {
+          title: 'Ángulo De Fijación Lateral Weidmuller Aeb 35 Sc/1',
+          price: 2900,
+          attributes: [{ id: 'MATERIAL', value_name: 'Plástico' }],
+        },
+        requestedBy: 'arturo@solediluminacion.com',
+      },
+    },
+  })
+  @ApiOkResponse({ description: 'Publicado, parcial o fallido' })
+  async publish(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: PublishPublicationBody,
+  ): Promise<PublishCoresaPublicationResult> {
+    this.logger.log(`[publish] publicación ${id}`);
+    return this.publishPublication.execute({
+      publicationId: id,
+      draft: body?.draft,
+      requestedBy: body?.requestedBy,
     });
   }
 }
