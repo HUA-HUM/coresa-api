@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import {
   CoresaPublication,
+  CoresaPublicationFilters,
   CreateCoresaPublicationInput,
   UpdateCoresaPublicationInput,
 } from '../../../entities/CoresaPublication';
@@ -36,6 +37,7 @@ export class APICoresaPublicationRepository {
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
     data?: unknown,
+    params?: Record<string, string | number>,
   ): AxiosRequestConfig {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -49,6 +51,7 @@ export class APICoresaPublicationRepository {
       timeout: this.timeout,
     };
     if (data !== undefined) config.data = data;
+    if (params !== undefined) config.params = params;
     return config;
   }
 
@@ -123,5 +126,50 @@ export class APICoresaPublicationRepository {
       if (axios.isAxiosError(err) && err.response?.status === 404) return null;
       throw err;
     }
+  }
+
+  /** Todos los intentos de ese SKU, del más nuevo al más viejo. */
+  async getHistoryBySku(sku: string): Promise<CoresaPublication[]> {
+    const config = this.prepareRequest(
+      'GET',
+      `${BASE_PATH}/by-sku/${encodeURIComponent(sku)}/history`,
+    );
+    try {
+      const response = await this.axios.request(config);
+      const payload: unknown = response.data;
+      if (Array.isArray(payload)) return payload as CoresaPublication[];
+      const items = (payload as { items?: CoresaPublication[] })?.items;
+      return Array.isArray(items) ? items : [];
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return [];
+      throw err;
+    }
+  }
+
+  async list(filters: CoresaPublicationFilters): Promise<{
+    items: CoresaPublication[];
+    pagination: { limit: number; offset: number; total: number };
+  }> {
+    const params: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue;
+      params[key] = value as string | number;
+    }
+
+    const config = this.prepareRequest('GET', BASE_PATH, undefined, params);
+    const response = await this.axios.request(config);
+    const payload = response.data as {
+      items?: CoresaPublication[];
+      pagination?: { limit: number; offset: number; total: number };
+    };
+
+    return {
+      items: Array.isArray(payload?.items) ? payload.items : [],
+      pagination: payload?.pagination ?? {
+        limit: Number(filters.limit ?? 50),
+        offset: Number(filters.offset ?? 0),
+        total: 0,
+      },
+    };
   }
 }
