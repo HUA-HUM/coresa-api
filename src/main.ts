@@ -12,6 +12,10 @@ async function bootstrap() {
     .setTitle('Coresa API')
     .setDescription('Sincroniza el catálogo Coresa hacia internal-api')
     .setVersion('1.0')
+    .addApiKey(
+      { type: 'apiKey', name: 'x-internal-api-key', in: 'header' },
+      'internal-api-key',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
