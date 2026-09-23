@@ -5,14 +5,17 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
+import { InternalApiKeyGuard } from '../../guards/InternalApiKey.guard';
 import {
   PreviewCoresaPublication,
   PreviewCoresaPublicationResult,
@@ -35,7 +38,9 @@ class PublishPublicationBody {
 }
 
 @ApiTags('Coresa Publications')
+@ApiSecurity('internal-api-key')
 @Controller('coresa/publications')
+@UseGuards(InternalApiKeyGuard)
 export class PublicationsCoresaController {
   private readonly logger = new Logger(PublicationsCoresaController.name);
 
