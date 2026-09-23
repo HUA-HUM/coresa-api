@@ -1,9 +1,11 @@
-import { InternalMeliBulkProduct } from '../../entities/InternalMeliBulkProduct';
-import { InternalMeliProduct } from '../../entities/InternalMeliProduct';
+import {
+  MeliBySkuLookup,
+  MeliListingProduct,
+} from '../../entities/MeliListingProduct';
 
 export interface IInternalApiRepository {
-  upsertProducts(products: InternalMeliBulkProduct[]): Promise<void>;
-  getProductBySku(sku: string): Promise<InternalMeliProduct | null>;
+  upsertProducts(products: MeliListingProduct[]): Promise<void>;
+  getProductBySku(sku: string): Promise<MeliBySkuLookup | null>;
 }
 
 export const IInternalApiRepositoryToken = Symbol('IInternalApiRepository');

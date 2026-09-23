@@ -1,9 +1,9 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { InternalMeliBulkProduct } from '../../../entities/InternalMeliBulkProduct';
 import {
-  InternalMeliProduct,
-  mapInternalMeliProduct,
-} from '../../../entities/InternalMeliProduct';
+  MeliBySkuLookup,
+  MeliListingProduct,
+  mapMeliBySkuLookup,
+} from '../../../entities/MeliListingProduct';
 
 export class APIInternalApiRepository {
   constructor(private readonly axios: AxiosInstance) {}
@@ -99,7 +99,7 @@ export class APIInternalApiRepository {
     return out;
   }
 
-  async upsertProducts(products: InternalMeliBulkProduct[]): Promise<void> {
+  async upsertProducts(products: MeliListingProduct[]): Promise<void> {
     if (products.length === 0) return;
 
     for (const batch of this.chunk(products, this.chunkSize)) {
@@ -117,7 +117,7 @@ export class APIInternalApiRepository {
     }
   }
 
-  async getProductBySku(sku: string): Promise<InternalMeliProduct | null> {
+  async getProductBySku(sku: string): Promise<MeliBySkuLookup | null> {
     const encoded = encodeURIComponent(sku);
     try {
       const config = this.prepareRequest(
@@ -130,7 +130,7 @@ export class APIInternalApiRepository {
           `[internal-api] by-sku ${sku} -> ${response.status}: ${JSON.stringify(response.data)}`,
         );
       }
-      return mapInternalMeliProduct(response.data);
+      return mapMeliBySkuLookup(response.data);
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         return null;

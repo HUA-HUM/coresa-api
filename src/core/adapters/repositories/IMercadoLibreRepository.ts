@@ -1,7 +1,7 @@
-import { ActiveMeliListing } from '../../entities/ActiveMeliListing';
+import { MeliListingProduct } from '../../entities/MeliListingProduct';
 
 export interface IMercadoLibreRepository {
-  updateListings(items: ActiveMeliListing[]): Promise<void>;
+  updateListings(items: MeliListingProduct[]): Promise<void>;
 }
 
 export const IMercadoLibreRepositoryToken = Symbol('IMercadoLibreRepository');

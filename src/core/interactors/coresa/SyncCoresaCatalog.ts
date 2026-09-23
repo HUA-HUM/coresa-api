@@ -15,11 +15,17 @@ import {
   IMercadoLibreRepository,
   IMercadoLibreRepositoryToken,
 } from '../../adapters/repositories/IMercadoLibreRepository';
-import { ActiveMeliListing } from '../../entities/ActiveMeliListing';
 import { BrandCatalog } from '../../entities/BrandCatalog';
 import { CoresaProduct } from '../../entities/CoresaProduct';
-import { isActiveMeliStatus } from '../../entities/InternalMeliProduct';
-import { getMeliSellerId } from '../../utils/coresaPriceStock';
+import {
+  isActiveMeliStatus,
+  MeliListingProduct,
+} from '../../entities/MeliListingProduct';
+import {
+  getDiscountPercent,
+  getMeliSellerId,
+  mapCoresaToMeliListing,
+} from '../../utils/coresaPriceStock';
 import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
 import { SyncCoresaProductsToInternalApi } from './SyncCoresaProductsToInternalApi';
 
@@ -59,40 +65,56 @@ export class SyncCoresaCatalog {
         .join(', ')}`,
     );
 
-    const [usdBna, activeForMeli] = await Promise.all([
+    // Comentar esta línea para mandar todas las marcas a ML.
+    const forMeli = products.filter(
+      (p) => String(p.Marca ?? '').trim().toUpperCase() === 'JADEVER',
+    );
+
+    const [usdBna, matches] = await Promise.all([
       this.exchangeRate.getUsdBnaSell(),
-      this.classifyActiveForMeli(products),
+      this.findActiveMatches(forMeli),
     ]);
 
+    const discountPercent = getDiscountPercent();
+    const sellerId = getMeliSellerId();
+    const listings: MeliListingProduct[] = [];
+    for (const match of matches) {
+      const mapped = mapCoresaToMeliListing(
+        match.product,
+        match.meli_item_id,
+        usdBna,
+        sellerId,
+        discountPercent,
+      );
+      if (!mapped) {
+        const sku = String(match.product.SKU ?? '').trim() || '(sin SKU)';
+        this.logger.warn(
+          `[internal-api] SKU ${sku} sin MLA o precio válido, se omite`,
+        );
+        continue;
+      }
+      listings.push(mapped);
+    }
+
     this.logger.log(`[Coresa] USD BNA venta: ${usdBna}`);
-    this.logger.log(
-      `[Coresa] ${activeForMeli.length} publicaciones ML activas`,
-    );
+    this.logger.log(`[Coresa] ${listings.length} publicaciones ML activas`);
 
-    const upserted = await this.syncInternal.execute(
-      activeForMeli,
-      usdBna,
-      getMeliSellerId(),
-    );
-
-    // Listo para pegarle a meli-api:
-    // await this.mercadoLibreRepo.updateListings(activeForMeli);
+    const upserted = await this.syncInternal.execute(listings);
+    await this.mercadoLibreRepo.updateListings(listings);
 
     return {
       total: products.length,
       brands,
-      activeForMeli: activeForMeli.length,
+      activeForMeli: listings.length,
       upserted,
-      meliItemIdsSample: activeForMeli
-        .slice(0, 20)
-        .map((item) => item.meli_item_id),
+      meliItemIdsSample: listings.slice(0, 20).map((item) => item.meli_item_id),
     };
   }
 
-  private async classifyActiveForMeli(
+  private async findActiveMatches(
     products: CoresaProduct[],
-  ): Promise<ActiveMeliListing[]> {
-    const listings = await mapWithConcurrency(
+  ): Promise<{ product: CoresaProduct; meli_item_id: string }[]> {
+    const matches = await mapWithConcurrency(
       products,
       this.bySkuConcurrency,
       async (product) => {
@@ -103,14 +125,11 @@ export class SyncCoresaCatalog {
         }
 
         try {
-          const internal = await this.internalApi.getProductBySku(sku);
-          if (!internal || !isActiveMeliStatus(internal.status)) return null;
-          const meli_item_id = String(internal.meli_item_id ?? '').trim();
+          const lookup = await this.internalApi.getProductBySku(sku);
+          if (!lookup || !isActiveMeliStatus(lookup.status)) return null;
+          const meli_item_id = String(lookup.meli_item_id ?? '').trim();
           if (!meli_item_id) return null;
-          return {
-            product,
-            meli_item_id,
-          };
+          return { product, meli_item_id };
         } catch (err) {
           this.logger.warn(
             `[internal-api] by-sku ${sku} falló: ${err instanceof Error ? err.message : String(err)}`,
@@ -120,7 +139,10 @@ export class SyncCoresaCatalog {
       },
     );
 
-    return listings.filter((item): item is ActiveMeliListing => item !== null);
+    return matches.filter(
+      (item): item is { product: CoresaProduct; meli_item_id: string } =>
+        item !== null,
+    );
   }
 
   private productsByBrand(products: CoresaProduct[]): BrandCatalog[] {

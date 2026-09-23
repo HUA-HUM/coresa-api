@@ -1,5 +1,5 @@
 import { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { ActiveMeliListing } from '../../../entities/ActiveMeliListing';
+import { MeliListingProduct } from '../../../entities/MeliListingProduct';
 
 export class APIMeliApiRepository {
   constructor(private readonly axios: AxiosInstance) {}
@@ -38,19 +38,15 @@ export class APIMeliApiRepository {
     return config;
   }
 
-  async updateListings(items: ActiveMeliListing[]): Promise<void> {
+  async updateListings(items: MeliListingProduct[]): Promise<void> {
     if (items.length === 0) return;
 
-    const config = this.prepareRequest(
-      '/listings/update',
-      {},
-      {
-        items: items.map((item) => ({
-          meli_item_id: item.meli_item_id,
-          product: item.product,
-        })),
-      },
-    );
+    const config = this.prepareRequest('/meli/products/:itemId/price', {}, {
+      items: items.map((item) => ({
+        meli_item_id: item.meli_item_id,
+        price: item.price,
+      })),
+    });
     const response = await this.axios.request(config);
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
