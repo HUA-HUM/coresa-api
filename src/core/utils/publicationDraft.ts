@@ -21,9 +21,38 @@ export function getFreeShipping(): boolean {
   return String(process.env.MELI_FREE_SHIPPING ?? 'false').trim() === 'true';
 }
 
-/** Código de barras unitario, que es el GTIN que espera ML. */
+/**
+ * Un GTIN válido tiene 8, 12, 13 o 14 dígitos y el último es un dígito
+ * verificador. ML lo valida y rechaza la publicación si no cierra.
+ */
+export function isValidGtin(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false;
+  if (![8, 12, 13, 14].includes(value.length)) return false;
+
+  const digits = value.split('').map(Number);
+  const check = digits.pop() as number;
+  // De derecha a izquierda, los pesos alternan 3 y 1.
+  const sum = digits
+    .reverse()
+    .reduce(
+      (total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1),
+      0,
+    );
+
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+/**
+ * Código de barras que se manda como GTIN. Coresa a veces trae el unitario
+ * mal (por ejemplo con un cero de más), así que se prueba el unitario y,
+ * si no cierra, el master.
+ */
 export function getGtin(product: CoresaProduct): string {
-  return String(product.CodBarra_Unitario ?? '').trim();
+  const candidates = [
+    String(product.CodBarra_Unitario ?? '').trim(),
+    String(product.CodBarra_Master ?? '').trim(),
+  ];
+  return candidates.find((candidate) => isValidGtin(candidate)) ?? '';
 }
 
 /** Dimensión del paquete en cm enteros: ML no acepta menos que el producto. */

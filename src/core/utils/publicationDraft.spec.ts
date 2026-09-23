@@ -2,6 +2,7 @@ import { CoresaProduct } from '../entities/CoresaProduct';
 import {
   buildPublicationDraft,
   getGtin,
+  isValidGtin,
   valueAddedTax,
 } from './publicationDraft';
 
@@ -100,9 +101,40 @@ describe('buildPublicationDraft', () => {
     expect(draft.available_quantity).toBe(16);
   });
 
-  it('toma el código de barras unitario como GTIN', () => {
+  it('toma el código de barras unitario como GTIN cuando es válido', () => {
     expect(getGtin(product)).toBe('4050118376722');
     expect(getGtin({ ...product, CodBarra_Unitario: undefined })).toBe('');
+  });
+
+  it('cae al código master cuando el unitario no cierra', () => {
+    // Caso real de Coresa: al unitario le sobra un cero.
+    expect(
+      getGtin({
+        ...product,
+        CodBarra_Unitario: '40501183767220',
+        CodBarra_Master: '4050118376722',
+      }),
+    ).toBe('4050118376722');
+  });
+
+  it('no manda GTIN si ninguno de los dos códigos es válido', () => {
+    expect(
+      getGtin({
+        ...product,
+        CodBarra_Unitario: '40501183767220',
+        CodBarra_Master: '123',
+      }),
+    ).toBe('');
+  });
+
+  it('valida el dígito verificador y el largo', () => {
+    expect(isValidGtin('4050118376722')).toBe(true);
+    expect(isValidGtin('6942431492754')).toBe(true);
+    expect(isValidGtin('40501183767220')).toBe(false);
+    expect(isValidGtin('4050118376723')).toBe(false);
+    expect(isValidGtin('12345')).toBe(false);
+    expect(isValidGtin('405011837672A')).toBe(false);
+    expect(isValidGtin('')).toBe(false);
   });
 });
 

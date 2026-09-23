@@ -52,12 +52,43 @@ export class APICoresaPublicationRepository {
     return config;
   }
 
+  /**
+   * Si el SKU ya tiene una publicación en curso, internal-api responde 409
+   * con su id. Rearmar el borrador de un SKU es normal (el usuario corrige y
+   * vuelve a pedir el preview), así que se reutiliza esa publicación en vez
+   * de fallar: se le pisa el borrador con el nuevo.
+   */
   async create(
     input: CreateCoresaPublicationInput,
   ): Promise<CoresaPublication> {
     const config = this.prepareRequest('POST', BASE_PATH, input);
-    const response = await this.axios.request(config);
-    return response.data as CoresaPublication;
+    try {
+      const response = await this.axios.request(config);
+      return response.data as CoresaPublication;
+    } catch (err) {
+      const existingId = this.inProgressPublicationId(err);
+      if (existingId === null) throw err;
+
+      return this.update(existingId, {
+        status: 'draft',
+        draft: input.draft,
+        errorCode: null,
+        errorMessage: null,
+      });
+    }
+  }
+
+  private inProgressPublicationId(err: unknown): number | null {
+    if (!axios.isAxiosError(err) || err.response?.status !== 409) return null;
+
+    const body = err.response.data as {
+      code?: string;
+      publicationId?: number;
+    };
+    if (body?.code !== 'publication_in_progress') return null;
+
+    const id = Number(body.publicationId);
+    return Number.isInteger(id) && id > 0 ? id : null;
   }
 
   async update(

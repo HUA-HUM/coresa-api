@@ -67,7 +67,10 @@ export class SyncCoresaCatalog {
 
     // Comentar esta línea para mandar todas las marcas a ML.
     const forMeli = products.filter(
-      (p) => String(p.Marca ?? '').trim().toUpperCase() === 'JADEVER',
+      (p) =>
+        String(p.Marca ?? '')
+          .trim()
+          .toUpperCase() === 'JADEVER',
     );
 
     const [usdBna, matches] = await Promise.all([

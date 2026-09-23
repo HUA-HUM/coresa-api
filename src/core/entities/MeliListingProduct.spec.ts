@@ -1,11 +1,10 @@
-import {
-  isActiveMeliStatus,
-  mapMeliBySkuLookup,
-} from './MeliListingProduct';
+import { isActiveMeliStatus, mapMeliBySkuLookup } from './MeliListingProduct';
 
 describe('MeliListingProduct', () => {
   it('mapea meli_item_id, meliItemId, MLA e id', () => {
-    expect(mapMeliBySkuLookup({ sku: 'A', status: 'active', MLA: 'MLA1' })).toEqual({
+    expect(
+      mapMeliBySkuLookup({ sku: 'A', status: 'active', MLA: 'MLA1' }),
+    ).toEqual({
       sku: 'A',
       status: 'active',
       meli_item_id: 'MLA1',
