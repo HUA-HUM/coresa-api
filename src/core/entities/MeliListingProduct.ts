@@ -1,10 +1,21 @@
-export class InternalMeliProduct {
+export class MeliListingProduct {
+  meli_item_id: string;
+  seller_id: string;
+  sku: string;
+  title: string;
+  price: number;
+  available_quantity: number;
+  status: string;
+  raw_payload: Record<string, unknown>;
+}
+
+export type MeliBySkuLookup = {
   sku: string;
   status: string;
   meli_item_id: string | null;
-}
+};
 
-export function mapInternalMeliProduct(payload: unknown): InternalMeliProduct | null {
+export function mapMeliBySkuLookup(payload: unknown): MeliBySkuLookup | null {
   if (!payload || typeof payload !== 'object') return null;
 
   const root = payload as Record<string, unknown>;

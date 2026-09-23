@@ -1,5 +1,5 @@
-import { ActiveMeliListing } from '../entities/ActiveMeliListing';
-import { InternalMeliBulkProduct } from '../entities/InternalMeliBulkProduct';
+import { CoresaProduct } from '../entities/CoresaProduct';
+import { MeliListingProduct } from '../entities/MeliListingProduct';
 
 export const IVA_RATE = 0.21;
 export const MARGIN_RATE = 0.65;
@@ -66,31 +66,32 @@ export function calculateCoresaStock(
   return Math.floor(stock / cantInter);
 }
 
-export function mapListingToBulkProduct(
-  listing: ActiveMeliListing,
+export function mapCoresaToMeliListing(
+  product: CoresaProduct,
+  meli_item_id: string,
   usdBna: number,
   sellerId: string,
   discountPercent: number = DEFAULT_DISCOUNT_PERCENT,
-): InternalMeliBulkProduct | null {
-  const meli_item_id = String(listing.meli_item_id ?? '').trim();
-  if (!meli_item_id) return null;
+): MeliListingProduct | null {
+  const itemId = String(meli_item_id ?? '').trim();
+  if (!itemId) return null;
 
   const price = calculateCoresaPriceArs(
-    listing.product.Precio_Lista_1,
+    product.Precio_Lista_1,
     usdBna,
     discountPercent,
   );
   if (price === null) return null;
 
   return {
-    meli_item_id,
+    meli_item_id: itemId,
     seller_id: sellerId,
-    sku: String(listing.product.SKU ?? '').trim(),
-    title: String(listing.product.Descripcion ?? '').trim(),
+    sku: String(product.SKU ?? '').trim(),
+    title: String(product.Descripcion ?? '').trim(),
     price,
     available_quantity: calculateCoresaStock(
-      listing.product.Disponible,
-      listing.product.CantIntermedia,
+      product.Disponible,
+      product.CantIntermedia,
     ),
     status: 'active',
     raw_payload: {},

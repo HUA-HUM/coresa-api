@@ -5,7 +5,7 @@ import {
   DEFAULT_MELI_SELLER_ID,
   getDiscountPercent,
   getMeliSellerId,
-  mapListingToBulkProduct,
+  mapCoresaToMeliListing,
   toNumber,
 } from './coresaPriceStock';
 
@@ -58,21 +58,18 @@ describe('coresaPriceStock', () => {
     });
   });
 
-  describe('mapListingToBulkProduct', () => {
+  describe('mapCoresaToMeliListing', () => {
     it('arma el body de /bulk y omite sin MLA o sin precio', () => {
-      const listing = {
-        meli_item_id: 'MLA123',
-        product: {
-          SKU: 'B0XXXX',
-          Descripcion: 'Producto ejemplo',
-          Precio_Lista_1: 100,
-          Disponible: 100,
-          CantIntermedia: 12,
-        },
+      const product = {
+        SKU: 'B0XXXX',
+        Descripcion: 'Producto ejemplo',
+        Precio_Lista_1: 100,
+        Disponible: 100,
+        CantIntermedia: 12,
       };
 
       expect(
-        mapListingToBulkProduct(listing, 1000, '6863691', 50),
+        mapCoresaToMeliListing(product, 'MLA123', 1000, '6863691', 50),
       ).toEqual({
         meli_item_id: 'MLA123',
         seller_id: '6863691',
@@ -85,11 +82,12 @@ describe('coresaPriceStock', () => {
       });
 
       expect(
-        mapListingToBulkProduct({ ...listing, meli_item_id: '' }, 1000, '6863691'),
+        mapCoresaToMeliListing(product, '', 1000, '6863691'),
       ).toBeNull();
       expect(
-        mapListingToBulkProduct(
-          { ...listing, product: { ...listing.product, Precio_Lista_1: 0 } },
+        mapCoresaToMeliListing(
+          { ...product, Precio_Lista_1: 0 },
+          'MLA123',
           1000,
           '6863691',
         ),
