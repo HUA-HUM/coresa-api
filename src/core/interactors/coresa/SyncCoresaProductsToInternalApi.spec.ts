@@ -21,9 +21,9 @@ describe('SyncCoresaProductsToInternalApi', () => {
       },
     ];
 
-    const upserted = await new SyncCoresaProductsToInternalApi(internalApi).execute(
-      products,
-    );
+    const upserted = await new SyncCoresaProductsToInternalApi(
+      internalApi,
+    ).execute(products);
 
     expect(upserted).toBe(1);
     expect(internalApi.upsertProducts).toHaveBeenCalledWith(products);

@@ -81,9 +81,7 @@ describe('coresaPriceStock', () => {
         raw_payload: {},
       });
 
-      expect(
-        mapCoresaToMeliListing(product, '', 1000, '6863691'),
-      ).toBeNull();
+      expect(mapCoresaToMeliListing(product, '', 1000, '6863691')).toBeNull();
       expect(
         mapCoresaToMeliListing(
           { ...product, Precio_Lista_1: 0 },
