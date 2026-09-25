@@ -38,6 +38,7 @@ export class SyncCoresaCatalog {
     const products = await this.coresaRepo.getAllProducts();
     const usdBna = await this.exchangeRate.getUsdBnaSell();
     const discountPercent = getDiscountPercent();
+    
     const priced: CoresaProduct[] = [];
     let skipped = 0;
 

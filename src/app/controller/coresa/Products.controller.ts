@@ -1,10 +1,18 @@
-import { Controller, Get, Logger, Post } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Logger, Post, UseGuards } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
+import { InternalApiKeyGuard } from '../../guards/InternalApiKey.guard';
 import { SyncCoresaCatalog } from '../../../core/interactors/coresa/SyncCoresaCatalog';
 import { SyncCoresaProductsToMercadoLibreApi } from '../../../core/interactors/coresa/SyncCoresaProductsToMercadoLibreApi';
 
 @ApiTags('Coresa Products')
+@ApiSecurity('internal-api-key')
 @Controller('coresa')
+@UseGuards(InternalApiKeyGuard)
 export class ProductsCoresaController {
   private readonly logger = new Logger(ProductsCoresaController.name);
 

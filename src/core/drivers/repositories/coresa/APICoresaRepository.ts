@@ -1,4 +1,4 @@
-import { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { CoresaProduct } from '../../../entities/CoresaProduct';
 
 export class APICoresaRepository {
@@ -95,9 +95,15 @@ export class APICoresaRepository {
     return products;
   }
 
+  /** La API de Coresa responde 404 cuando el SKU no está en el catálogo. */
   async getProductBySku(sku: string): Promise<CoresaProduct | null> {
     const config = this.prepareRequest({ sku });
-    const response = await this.axios.request(config);
-    return this.getSingleProduct(response.data);
+    try {
+      const response = await this.axios.request(config);
+      return this.getSingleProduct(response.data);
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+      throw err;
+    }
   }
 }
