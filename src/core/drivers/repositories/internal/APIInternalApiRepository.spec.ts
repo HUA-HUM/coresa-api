@@ -75,7 +75,7 @@ describe('APIInternalApiRepository', () => {
       expect.objectContaining({
         method: 'GET',
         url: 'https://internal.example.com/internal/coresa/products-in-mercadolibre',
-        params: { page: 1, limit: 200 },
+        params: { limit: 200, offset: 0 },
       }),
     );
     expect(links).toEqual([
@@ -99,7 +99,7 @@ describe('APIInternalApiRepository', () => {
           products: [
             { sku: 'A', mla: 'MLA1', updateStock: true, updatePrice: true },
           ],
-          meta: { total: 2 },
+          pagination: { limit: 1, offset: 0, total: 2 },
         },
       })
       .mockResolvedValueOnce({
@@ -108,7 +108,7 @@ describe('APIInternalApiRepository', () => {
           products: [
             { sku: 'B', mla: 'MLA2', update_stock: false, update_price: false },
           ],
-          meta: { total: 2 },
+          pagination: { limit: 1, offset: 1, total: 2 },
         },
       });
     const repo = new APIInternalApiRepository({ request } as never);
@@ -117,11 +117,11 @@ describe('APIInternalApiRepository', () => {
 
     expect(request).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ params: { page: 1, limit: 1 } }),
+      expect.objectContaining({ params: { limit: 1, offset: 0 } }),
     );
     expect(request).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ params: { page: 2, limit: 1 } }),
+      expect.objectContaining({ params: { limit: 1, offset: 1 } }),
     );
     expect(links.map((link) => link.sku)).toEqual(['A', 'B']);
   });

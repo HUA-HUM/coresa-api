@@ -29,7 +29,7 @@ export class APIMeliApiRepository {
     if (this.apiKey) headers['x-api-key'] = this.apiKey.trim();
 
     const config: AxiosRequestConfig = {
-      method: data !== undefined ? 'POST' : 'GET',
+      method: data !== undefined ? 'PUT' : 'GET',
       url: `${this.apiUrl.replace(/\/$/, '')}${path}`,
       headers,
       params: query,

@@ -144,31 +144,20 @@ export class APIInternalApiRepository {
     }
   }
 
-  private hasNextPage(
-    payload: unknown,
-    page: number,
-    pageItems: number,
-    limit: number,
-  ): boolean {
+  private readTotal(payload: unknown): number | null {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return pageItems >= limit;
+      return null;
     }
-    const root = payload as Record<string, unknown>;
-    const meta =
-      root.meta && typeof root.meta === 'object' && !Array.isArray(root.meta)
-        ? (root.meta as Record<string, unknown>)
-        : root;
-
-    if (typeof meta.has_next === 'boolean') return meta.has_next;
-    if (typeof meta.hasNext === 'boolean') return meta.hasNext;
-
-    const totalPages = meta.total_pages ?? meta.totalPages;
-    if (typeof totalPages === 'number') return page < totalPages;
-
-    const total = meta.total ?? meta.totalItems ?? meta.total_items;
-    if (typeof total === 'number') return page * limit < total;
-
-    return pageItems >= limit;
+    const pagination = (payload as Record<string, unknown>).pagination;
+    if (
+      !pagination ||
+      typeof pagination !== 'object' ||
+      Array.isArray(pagination)
+    ) {
+      return null;
+    }
+    const total = (pagination as Record<string, unknown>).total;
+    return typeof total === 'number' ? total : null;
   }
 
   async listCoresaProductsInMercadoLibre(): Promise<
@@ -176,13 +165,12 @@ export class APIInternalApiRepository {
   > {
     const limit = this.pageLimit;
     const links: CoresaProductInMercadoLibre[] = [];
-    const seen = new Set<string>();
-    let page = 1;
+    let offset = 0;
 
-    while (page <= 500) {
+    while (offset <= limit * 500) {
       const config = this.prepareRequest(
         '/internal/coresa/products-in-mercadolibre',
-        { page, limit },
+        { limit, offset },
       );
       const response = await this.request(config);
       if (response.status < 200 || response.status >= 300) {
@@ -192,19 +180,18 @@ export class APIInternalApiRepository {
       }
 
       const mapped = mapCoresaProductsInMercadoLibre(response.data);
-      let added = 0;
-      for (const link of mapped) {
-        const key = `${link.sku}\0${link.mla}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        links.push(link);
-        added += 1;
-      }
+      links.push(...mapped);
 
       const pageItems = unwrapList(response.data).length;
-      if (!this.hasNextPage(response.data, page, pageItems, limit)) break;
-      if (added === 0) break;
-      page += 1;
+      if (pageItems === 0) break;
+
+      offset += pageItems;
+      const total = this.readTotal(response.data);
+      if (total !== null) {
+        if (offset >= total) break;
+      } else if (pageItems < limit) {
+        break;
+      }
     }
 
     return links;
