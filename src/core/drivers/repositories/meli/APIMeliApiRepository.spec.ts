@@ -1,5 +1,4 @@
 import { APIMeliApiRepository } from './APIMeliApiRepository';
-import { MeliListingProduct } from '../../../entities/MeliListingProduct';
 
 describe('APIMeliApiRepository', () => {
   const originalEnv = process.env;
@@ -16,38 +15,39 @@ describe('APIMeliApiRepository', () => {
     process.env = originalEnv;
   });
 
-  it('no llama a meli-api si no hay listings', async () => {
+  it('no llama a meli-api si el patch está vacío', async () => {
     const request = jest.fn();
     const repo = new APIMeliApiRepository({ request } as never);
 
-    await repo.updateListings([]);
+    await repo.updateListing('MLA1', {});
 
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('posta listings con meli_item_id y price', async () => {
+  it('posta solo los campos presentes del patch', async () => {
     const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
     const repo = new APIMeliApiRepository({ request } as never);
-    const listing: MeliListingProduct = {
-      meli_item_id: 'MLA1',
-      seller_id: '6863691',
-      sku: 'A',
-      title: 'Prod A',
-      price: 99825,
-      available_quantity: 12,
-      status: 'active',
-      raw_payload: {},
-    };
 
-    await repo.updateListings([listing]);
+    await repo.updateListing('MLA1', { price: 998250 });
+    await repo.updateListing('MLA 2', {
+      price: 5600,
+      available_quantity: 900,
+    });
 
-    expect(request).toHaveBeenCalledWith(
+    expect(request).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         method: 'POST',
-        url: 'https://api.meli.example.com/meli/products/:itemId/price',
-        data: {
-          items: [{ meli_item_id: 'MLA1', price: 99825 }],
-        },
+        url: 'https://api.meli.example.com/meli/items/MLA1',
+        data: { price: 998250 },
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: 'POST',
+        url: 'https://api.meli.example.com/meli/items/MLA%202',
+        data: { price: 5600, available_quantity: 900 },
       }),
     );
   });

@@ -1,11 +1,16 @@
+import { CoresaProduct } from '../../entities/CoresaProduct';
 import {
-  MeliBySkuLookup,
-  MeliListingProduct,
-} from '../../entities/MeliListingProduct';
+  CoresaProductInMercadoLibre,
+  MercadoLibreProductSnapshot,
+} from '../../entities/CoresaMercadoLibre';
 
 export interface IInternalApiRepository {
-  upsertProducts(products: MeliListingProduct[]): Promise<void>;
-  getProductBySku(sku: string): Promise<MeliBySkuLookup | null>;
+  upsertCoresaProducts(products: CoresaProduct[]): Promise<void>;
+  listCoresaProductsInMercadoLibre(): Promise<CoresaProductInMercadoLibre[]>;
+  getCoresaProductBySku(sku: string): Promise<CoresaProduct | null>;
+  getMercadoLibreProductByMla(
+    mla: string,
+  ): Promise<MercadoLibreProductSnapshot | null>;
 }
 
 export const IInternalApiRepositoryToken = Symbol('IInternalApiRepository');

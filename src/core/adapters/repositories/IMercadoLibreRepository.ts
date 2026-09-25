@@ -1,7 +1,7 @@
-import { MeliListingProduct } from '../../entities/MeliListingProduct';
+import { MeliListingUpdate } from '../../entities/CoresaMercadoLibre';
 
 export interface IMercadoLibreRepository {
-  updateListings(items: MeliListingProduct[]): Promise<void>;
+  updateListing(mla: string, patch: MeliListingUpdate): Promise<void>;
 }
 
 export const IMercadoLibreRepositoryToken = Symbol('IMercadoLibreRepository');

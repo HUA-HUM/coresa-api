@@ -1,12 +1,16 @@
 import {
   calculateCoresaPriceArs,
-  calculateCoresaStock,
   DEFAULT_DISCOUNT_PERCENT,
-  DEFAULT_MELI_SELLER_ID,
+  formulaForBrand,
+  FORMULA_1_MARGIN,
+  FORMULA_2_MARGIN,
+  FORMULA_3_MARGIN,
   getDiscountPercent,
-  getMeliSellerId,
-  mapCoresaToMeliListing,
+  marginForFormula,
+  parseIvaRate,
+  priceCoresaProduct,
   toNumber,
+  totalStock,
 } from './coresaPriceStock';
 
 describe('coresaPriceStock', () => {
@@ -28,86 +32,123 @@ describe('coresaPriceStock', () => {
     });
   });
 
-  describe('calculateCoresaPriceArs', () => {
-    it('aplica descuento 50%, IVA 21%, margen 65% y BNA', () => {
-      // 100 * 0.5 * 1.21 * 1.65 * 1000 = 99825
-      expect(calculateCoresaPriceArs(100, 1000, 50)).toBe(99825);
+  describe('parseIvaRate', () => {
+    it('acepta IVA_21 e IVA_10.5', () => {
+      expect(parseIvaRate('IVA_21')).toBe(0.21);
+      expect(parseIvaRate('iva_10,5')).toBe(0.105);
+      expect(parseIvaRate('IVA_27')).toBeNull();
+      expect(parseIvaRate('')).toBeNull();
+    });
+  });
+
+  describe('formulaForBrand', () => {
+    it('usa fórmula 1 si la marca está en esa lista, aunque también esté en otra', () => {
+      expect(formulaForBrand('Jadever')).toBe(1);
+      expect(formulaForBrand(' chint ')).toBe(1);
+      expect(formulaForBrand('MACROLED')).toBe(1);
+      expect(formulaForBrand('uniview')).toBe(1);
+      expect(marginForFormula(1)).toBe(FORMULA_1_MARGIN);
     });
 
-    it('usa descuento default 50%', () => {
-      expect(calculateCoresaPriceArs(100, 1000)).toBe(99825);
+    it('deja la fórmula 2 mapeada y aplica la 3 solo a Wadermuller', () => {
+      expect(marginForFormula(2)).toBe(FORMULA_2_MARGIN);
+      expect(formulaForBrand('Weidmuller')).toBe(3);
+      expect(marginForFormula(3)).toBe(FORMULA_3_MARGIN);
+      expect(formulaForBrand('Otra')).toBeNull();
+      expect(formulaForBrand('')).toBeNull();
+    });
+  });
+
+  describe('calculateCoresaPriceArs', () => {
+    it('aplica pack, pesos, 50%, IVA y margen 65%', () => {
+      // 10 * 100 * 1000 * 0.5 * 1.21 * 1.65 = 998250
+      expect(calculateCoresaPriceArs(10, 100, 1000, 0.21, 0.65, 50)).toBe(
+        998250,
+      );
+    });
+
+    it('trata CantIntermedia vacía como 1 y usa descuento default', () => {
+      // 100 * 1 * 1000 * 0.5 * 1.21 * 1.65 = 99825
+      expect(calculateCoresaPriceArs(100, 0, 1000, 0.21, 0.65)).toBe(99825);
+      expect(
+        calculateCoresaPriceArs(100, '', 1000, 0.21, FORMULA_3_MARGIN, 50),
+      ).toBe(Math.round(100 * 1000 * 0.5 * 1.21 * 1.5));
     });
 
     it('devuelve null si el USD lista o BNA no son > 0', () => {
-      expect(calculateCoresaPriceArs(0, 1000)).toBeNull();
-      expect(calculateCoresaPriceArs('no encontrado', 1000)).toBeNull();
-      expect(calculateCoresaPriceArs(100, 0)).toBeNull();
-    });
-  });
-
-  describe('calculateCoresaStock', () => {
-    it('usa Disponible si CantIntermedia es 0 o vacía', () => {
-      expect(calculateCoresaStock(12, 0)).toBe(12);
-      expect(calculateCoresaStock(12, '')).toBe(12);
-      expect(calculateCoresaStock('12', undefined)).toBe(12);
-    });
-
-    it('divide por CantIntermedia y redondea hacia abajo', () => {
-      expect(calculateCoresaStock(100, 12)).toBe(8);
-      expect(calculateCoresaStock('100', '12')).toBe(8);
-    });
-  });
-
-  describe('mapCoresaToMeliListing', () => {
-    it('arma el body de /bulk y omite sin MLA o sin precio', () => {
-      const product = {
-        SKU: 'B0XXXX',
-        Descripcion: 'Producto ejemplo',
-        Precio_Lista_1: 100,
-        Disponible: 100,
-        CantIntermedia: 12,
-      };
-
+      expect(calculateCoresaPriceArs(0, 1, 1000, 0.21, 0.65)).toBeNull();
       expect(
-        mapCoresaToMeliListing(product, 'MLA123', 1000, '6863691', 50),
-      ).toEqual({
-        meli_item_id: 'MLA123',
-        seller_id: '6863691',
-        sku: 'B0XXXX',
-        title: 'Producto ejemplo',
-        price: 99825,
-        available_quantity: 8,
-        status: 'active',
-        raw_payload: {},
-      });
-
-      expect(
-        mapCoresaToMeliListing(product, '', 1000, '6863691'),
+        calculateCoresaPriceArs('no encontrado', 1, 1000, 0.21, 0.65),
       ).toBeNull();
+      expect(calculateCoresaPriceArs(100, 1, 0, 0.21, 0.65)).toBeNull();
+    });
+  });
+
+  describe('totalStock', () => {
+    it('guarda el stock total sin dividir por CantIntermedia', () => {
+      expect(totalStock(12.9)).toBe(12);
+      expect(totalStock('100')).toBe(100);
+      expect(totalStock('')).toBe(0);
+    });
+  });
+
+  describe('priceCoresaProduct', () => {
+    it('guarda el precio final en Precio_Convertido y deja lista y moneda de Coresa', () => {
+      const priced = priceCoresaProduct(
+        {
+          SKU: ' B0 ',
+          Marca: 'Jadever',
+          Impuestos: 'IVA_21',
+          Precio_Lista_1: 10,
+          Moneda: 'USD',
+          CantIntermedia: 100,
+          Disponible: 250,
+          Descripcion: 'Pack',
+        },
+        1000,
+        50,
+      );
+
+      expect(priced).toEqual({
+        SKU: 'B0',
+        Marca: 'Jadever',
+        Impuestos: 'IVA_21',
+        Precio_Lista_1: 10,
+        Precio_Convertido: 998250,
+        Moneda: 'USD',
+        CantIntermedia: 100,
+        Disponible: 250,
+        Descripcion: 'Pack',
+      });
+    });
+
+    it('omite sin SKU, sin IVA, sin fórmula o sin precio', () => {
+      const base = {
+        SKU: 'A',
+        Marca: 'Jadever',
+        Impuestos: 'IVA_21',
+        Precio_Lista_1: 10,
+        CantIntermedia: 1,
+      };
+      expect(priceCoresaProduct({ ...base, SKU: ' ' }, 1000)).toBeNull();
       expect(
-        mapCoresaToMeliListing(
-          { ...product, Precio_Lista_1: 0 },
-          'MLA123',
-          1000,
-          '6863691',
-        ),
+        priceCoresaProduct({ ...base, Impuestos: 'IVA_27' }, 1000),
+      ).toBeNull();
+      expect(priceCoresaProduct({ ...base, Marca: 'Otra' }, 1000)).toBeNull();
+      expect(
+        priceCoresaProduct({ ...base, Precio_Lista_1: 0 }, 1000),
       ).toBeNull();
     });
   });
 
   describe('env helpers', () => {
-    it('lee descuento y seller_id con defaults', () => {
+    it('lee descuento con default 50', () => {
       process.env = { ...originalEnv };
       delete process.env.CORESA_PRICE_DISCOUNT_PERCENT;
-      delete process.env.MELI_SELLER_ID;
-
       expect(getDiscountPercent()).toBe(DEFAULT_DISCOUNT_PERCENT);
-      expect(getMeliSellerId()).toBe(DEFAULT_MELI_SELLER_ID);
 
       process.env.CORESA_PRICE_DISCOUNT_PERCENT = '40';
-      process.env.MELI_SELLER_ID = '999';
       expect(getDiscountPercent()).toBe(40);
-      expect(getMeliSellerId()).toBe('999');
     });
   });
 });

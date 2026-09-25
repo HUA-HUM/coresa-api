@@ -1,9 +1,13 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { CoresaProduct } from '../../../entities/CoresaProduct';
 import {
-  MeliBySkuLookup,
-  MeliListingProduct,
-  mapMeliBySkuLookup,
-} from '../../../entities/MeliListingProduct';
+  CoresaProductInMercadoLibre,
+  MercadoLibreProductSnapshot,
+  mapCoresaProduct,
+  mapCoresaProductsInMercadoLibre,
+  mapMercadoLibreProductSnapshot,
+  unwrapList,
+} from '../../../entities/CoresaMercadoLibre';
 
 export class APIInternalApiRepository {
   constructor(private readonly axios: AxiosInstance) {}
@@ -24,6 +28,11 @@ export class APIInternalApiRepository {
 
   private get chunkSize(): number {
     return Number(process.env.INTERNAL_API_CHUNK_SIZE ?? 500);
+  }
+
+  private get pageLimit(): number {
+    const limit = Number(process.env.INTERNAL_API_PAGE_LIMIT ?? 200);
+    return Number.isFinite(limit) && limit > 0 ? limit : 200;
   }
 
   private get requestRetries(): number {
@@ -99,43 +108,127 @@ export class APIInternalApiRepository {
     return out;
   }
 
-  async upsertProducts(products: MeliListingProduct[]): Promise<void> {
-    if (products.length === 0) return;
-
-    for (const batch of this.chunk(products, this.chunkSize)) {
-      const config = this.prepareRequest(
-        '/internal/mercadolibre/products/bulk',
-        {},
-        { products: batch },
-      );
-      const response = await this.request(config);
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(
-          `[internal-api] upsert -> ${response.status}: ${JSON.stringify(response.data)}`,
-        );
-      }
-    }
-  }
-
-  async getProductBySku(sku: string): Promise<MeliBySkuLookup | null> {
-    const encoded = encodeURIComponent(sku);
+  private async getOrNull(path: string, label: string): Promise<unknown> {
     try {
-      const config = this.prepareRequest(
-        `/internal/mercadolibre/products/by-sku/${encoded}`,
-      );
-      const response = await this.request(config);
+      const response = await this.request(this.prepareRequest(path));
       if (response.status === 404) return null;
       if (response.status < 200 || response.status >= 300) {
         throw new Error(
-          `[internal-api] by-sku ${sku} -> ${response.status}: ${JSON.stringify(response.data)}`,
+          `[internal-api] ${label} -> ${response.status}: ${JSON.stringify(response.data)}`,
         );
       }
-      return mapMeliBySkuLookup(response.data);
+      return response.data;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         return null;
       }
       throw err;
     }
+  }
+
+  async upsertCoresaProducts(products: CoresaProduct[]): Promise<void> {
+    if (products.length === 0) return;
+
+    for (const batch of this.chunk(products, this.chunkSize)) {
+      const config = this.prepareRequest(
+        '/internal/coresa/products/bulk',
+        {},
+        { products: batch },
+      );
+      const response = await this.request(config);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `[internal-api] upsert coresa -> ${response.status}: ${JSON.stringify(response.data)}`,
+        );
+      }
+    }
+  }
+
+  private hasNextPage(
+    payload: unknown,
+    page: number,
+    pageItems: number,
+    limit: number,
+  ): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return pageItems >= limit;
+    }
+    const root = payload as Record<string, unknown>;
+    const meta =
+      root.meta && typeof root.meta === 'object' && !Array.isArray(root.meta)
+        ? (root.meta as Record<string, unknown>)
+        : root;
+
+    if (typeof meta.has_next === 'boolean') return meta.has_next;
+    if (typeof meta.hasNext === 'boolean') return meta.hasNext;
+
+    const totalPages = meta.total_pages ?? meta.totalPages;
+    if (typeof totalPages === 'number') return page < totalPages;
+
+    const total = meta.total ?? meta.totalItems ?? meta.total_items;
+    if (typeof total === 'number') return page * limit < total;
+
+    return pageItems >= limit;
+  }
+
+  async listCoresaProductsInMercadoLibre(): Promise<
+    CoresaProductInMercadoLibre[]
+  > {
+    const limit = this.pageLimit;
+    const links: CoresaProductInMercadoLibre[] = [];
+    const seen = new Set<string>();
+    let page = 1;
+
+    while (page <= 500) {
+      const config = this.prepareRequest(
+        '/internal/coresa/products-in-mercadolibre',
+        { page, limit },
+      );
+      const response = await this.request(config);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `[internal-api] products-in-mercadolibre -> ${response.status}: ${JSON.stringify(response.data)}`,
+        );
+      }
+
+      const mapped = mapCoresaProductsInMercadoLibre(response.data);
+      let added = 0;
+      for (const link of mapped) {
+        const key = `${link.sku}\0${link.mla}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        links.push(link);
+        added += 1;
+      }
+
+      const pageItems = unwrapList(response.data).length;
+      if (!this.hasNextPage(response.data, page, pageItems, limit)) break;
+      if (added === 0) break;
+      page += 1;
+    }
+
+    return links;
+  }
+
+  async getCoresaProductBySku(sku: string): Promise<CoresaProduct | null> {
+    const encoded = encodeURIComponent(sku);
+    const payload = await this.getOrNull(
+      `/internal/coresa/products/by-sku/${encoded}`,
+      `coresa by-sku ${sku}`,
+    );
+    if (payload === null) return null;
+    return mapCoresaProduct(payload);
+  }
+
+  async getMercadoLibreProductByMla(
+    mla: string,
+  ): Promise<MercadoLibreProductSnapshot | null> {
+    const encoded = encodeURIComponent(mla);
+    const payload = await this.getOrNull(
+      `/internal/mercadolibre/products/by-mla/${encoded}`,
+      `mercadolibre by-mla ${mla}`,
+    );
+    if (payload === null) return null;
+    return mapMercadoLibreProductSnapshot(payload);
   }
 }

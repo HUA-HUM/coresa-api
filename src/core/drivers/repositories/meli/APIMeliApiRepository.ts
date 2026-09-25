@@ -1,5 +1,5 @@
 import { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { MeliListingProduct } from '../../../entities/MeliListingProduct';
+import { MeliListingUpdate } from '../../../entities/CoresaMercadoLibre';
 
 export class APIMeliApiRepository {
   constructor(private readonly axios: AxiosInstance) {}
@@ -38,19 +38,22 @@ export class APIMeliApiRepository {
     return config;
   }
 
-  async updateListings(items: MeliListingProduct[]): Promise<void> {
-    if (items.length === 0) return;
+  async updateListing(mla: string, patch: MeliListingUpdate): Promise<void> {
+    const body: MeliListingUpdate = {};
+    if (patch.price !== undefined) body.price = patch.price;
+    if (patch.available_quantity !== undefined) {
+      body.available_quantity = patch.available_quantity;
+    }
+    if (body.price === undefined && body.available_quantity === undefined) {
+      return;
+    }
 
-    const config = this.prepareRequest('/meli/products/:itemId/price', {}, {
-      items: items.map((item) => ({
-        meli_item_id: item.meli_item_id,
-        price: item.price,
-      })),
-    });
+    const itemId = encodeURIComponent(mla);
+    const config = this.prepareRequest(`/meli/items/${itemId}`, {}, body);
     const response = await this.axios.request(config);
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
-        `[meli-api] updateListings -> ${response.status}: ${JSON.stringify(response.data)}`,
+        `[meli-api] updateListing ${mla} -> ${response.status}: ${JSON.stringify(response.data)}`,
       );
     }
   }

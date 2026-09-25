@@ -1,149 +1,72 @@
 import { SyncCoresaCatalog } from './SyncCoresaCatalog';
-import { SyncCoresaProductsToInternalApi } from './SyncCoresaProductsToInternalApi';
 import { CoresaProduct } from '../../entities/CoresaProduct';
 import { ICoresaRepository } from '../../adapters/repositories/ICoresaRepository';
 import { IExchangeRateRepository } from '../../adapters/repositories/IExchangeRateRepository';
 import { IInternalApiRepository } from '../../adapters/repositories/IInternalApiRepository';
-import { IMercadoLibreRepository } from '../../adapters/repositories/IMercadoLibreRepository';
-import { MeliBySkuLookup } from '../../entities/MeliListingProduct';
 
 describe('SyncCoresaCatalog', () => {
   const products: CoresaProduct[] = [
     {
       SKU: 'A',
       Marca: 'Jadever',
+      Impuestos: 'IVA_21',
       Descripcion: 'Prod A',
-      Precio_Lista_1: 100,
-      Disponible: 12,
+      Precio_Lista_1: 10,
+      CantIntermedia: 100,
+      Disponible: 250,
     },
-    { SKU: 'B', Marca: 'Timo', Precio_Lista_1: 50, Disponible: 5 },
-    { SKU: 'C', Marca: 'Timo' },
-    { SKU: '', Marca: 'Unknown' },
+    {
+      SKU: 'B',
+      Marca: 'Weidmuller',
+      Impuestos: 'IVA_10.5',
+      Precio_Lista_1: 20,
+      CantIntermedia: 2,
+      Disponible: 5,
+    },
+    { SKU: 'C', Marca: 'Otra', Impuestos: 'IVA_21', Precio_Lista_1: 10 },
+    { SKU: '', Marca: 'Jadever', Impuestos: 'IVA_21', Precio_Lista_1: 10 },
   ];
 
-  const listingA = {
-    meli_item_id: 'MLA1',
-    seller_id: '6863691',
-    sku: 'A',
-    title: 'Prod A',
-    price: 99825,
-    available_quantity: 12,
-    status: 'active',
-    raw_payload: {},
-  };
-
-  const mercadoLibreRepo: IMercadoLibreRepository = {
-    updateListings: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const exchangeRate: IExchangeRateRepository = {
-    getUsdBnaSell: jest.fn().mockResolvedValue(1000),
-  };
+  const getUsdBnaSell = jest.fn().mockResolvedValue(1000);
+  const exchangeRate: IExchangeRateRepository = { getUsdBnaSell };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (exchangeRate.getUsdBnaSell as jest.Mock).mockResolvedValue(1000);
+    getUsdBnaSell.mockResolvedValue(1000);
   });
 
-  it('filtra Jadever, hace upsert y envía a meli-api solo publicaciones active con MLA', async () => {
+  it('calcula precio de pack y stock total de todo el catálogo y hace upsert', async () => {
     const coresaRepo: ICoresaRepository = {
       getAllProducts: jest.fn().mockResolvedValue(products),
       getProductBySku: jest.fn(),
     };
-
+    const upsertCoresaProducts = jest.fn().mockResolvedValue(undefined);
     const internalApi: IInternalApiRepository = {
-      upsertProducts: jest.fn().mockResolvedValue(undefined),
-      getProductBySku: jest.fn(async (sku: string) => {
-        const map: Record<string, MeliBySkuLookup> = {
-          A: { sku: 'A', status: 'active', meli_item_id: 'MLA1' },
-          B: { sku: 'B', status: 'paused', meli_item_id: 'MLA2' },
-        };
-        return map[sku] ?? null;
-      }),
+      upsertCoresaProducts,
+      listCoresaProductsInMercadoLibre: jest.fn(),
+      getCoresaProductBySku: jest.fn(),
+      getMercadoLibreProductByMla: jest.fn(),
     };
 
-    const syncInternal = new SyncCoresaProductsToInternalApi(internalApi);
-    const useCase = new SyncCoresaCatalog(
+    const result = await new SyncCoresaCatalog(
       coresaRepo,
       internalApi,
-      mercadoLibreRepo,
       exchangeRate,
-      syncInternal,
-    );
+    ).execute();
 
-    const result = await useCase.execute();
-
-    expect(exchangeRate.getUsdBnaSell).toHaveBeenCalledTimes(1);
-    expect(internalApi.getProductBySku).toHaveBeenCalledWith('A');
-    expect(internalApi.getProductBySku).not.toHaveBeenCalledWith('B');
-    expect(internalApi.getProductBySku).not.toHaveBeenCalledWith('C');
-    expect(internalApi.getProductBySku).not.toHaveBeenCalledWith('');
-    expect(internalApi.upsertProducts).toHaveBeenCalledTimes(1);
-    expect(internalApi.upsertProducts).toHaveBeenCalledWith([listingA]);
-    expect(mercadoLibreRepo.updateListings).toHaveBeenCalledWith([listingA]);
-    expect(result.total).toBe(4);
-    expect(result.activeForMeli).toBe(1);
-    expect(result.upserted).toBe(1);
-    expect(result.meliItemIdsSample).toEqual(['MLA1']);
-    expect(result.brands).toEqual([
-      { brand: 'JADEVER', products: [products[0]] },
-      { brand: 'TIMO', products: [products[1], products[2]] },
-      { brand: 'UNKNOWN', products: [products[3]] },
+    expect(getUsdBnaSell).toHaveBeenCalledTimes(1);
+    expect(upsertCoresaProducts).toHaveBeenCalledWith([
+      {
+        ...products[0],
+        Precio_Convertido: 998250,
+        Disponible: 250,
+      },
+      {
+        ...products[1],
+        Precio_Convertido: Math.round(20 * 2 * 1000 * 0.5 * 1.105 * 1.5),
+        Disponible: 5,
+      },
     ]);
-  });
-
-  it('sigue el upsert si un lookup by-sku falla y omite active sin MLA', async () => {
-    const coresaRepo: ICoresaRepository = {
-      getAllProducts: jest.fn().mockResolvedValue([
-        { SKU: 'ERR', Marca: 'Jadever', Precio_Lista_1: 10 },
-        { SKU: 'NOMLA', Marca: 'Jadever', Precio_Lista_1: 10 },
-        {
-          SKU: 'OK',
-          Marca: 'Jadever',
-          Descripcion: 'Ok',
-          Precio_Lista_1: 100,
-          Disponible: 3,
-        },
-      ]),
-      getProductBySku: jest.fn(),
-    };
-
-    const listingOk = {
-      meli_item_id: 'MLA9',
-      seller_id: '6863691',
-      sku: 'OK',
-      title: 'Ok',
-      price: 99825,
-      available_quantity: 3,
-      status: 'active',
-      raw_payload: {},
-    };
-
-    const internalApi: IInternalApiRepository = {
-      upsertProducts: jest.fn().mockResolvedValue(undefined),
-      getProductBySku: jest.fn(async (sku: string) => {
-        if (sku === 'ERR') throw new Error('timeout');
-        if (sku === 'NOMLA') {
-          return { sku: 'NOMLA', status: 'active', meli_item_id: null };
-        }
-        return { sku: 'OK', status: 'ACTIVE', meli_item_id: 'MLA9' };
-      }),
-    };
-
-    const useCase = new SyncCoresaCatalog(
-      coresaRepo,
-      internalApi,
-      mercadoLibreRepo,
-      exchangeRate,
-      new SyncCoresaProductsToInternalApi(internalApi),
-    );
-
-    const result = await useCase.execute();
-
-    expect(result.activeForMeli).toBe(1);
-    expect(result.upserted).toBe(1);
-    expect(result.meliItemIdsSample).toEqual(['MLA9']);
-    expect(internalApi.upsertProducts).toHaveBeenCalledWith([listingOk]);
-    expect(mercadoLibreRepo.updateListings).toHaveBeenCalledWith([listingOk]);
+    expect(result).toEqual({ total: 4, upserted: 2, skipped: 2 });
   });
 });

@@ -1,18 +1,39 @@
 import { CoresaProduct } from '../entities/CoresaProduct';
-import { MeliListingProduct } from '../entities/MeliListingProduct';
 
-export const IVA_RATE = 0.21;
-export const MARGIN_RATE = 0.65;
 export const DEFAULT_DISCOUNT_PERCENT = 50;
-export const DEFAULT_MELI_SELLER_ID = '6863691';
+
+export const FORMULA_1_MARGIN = 0.65;
+/** Chint línea industrial y Macroled Skyline. Hoy no se elige sola: esas marcas también están en la fórmula 1. */
+export const FORMULA_2_MARGIN = 0.7;
+export const FORMULA_3_MARGIN = 0.5;
+
+const FORMULA_1_BRANDS = new Set([
+  'MACROLED',
+  'INTECK',
+  'POWERSWITCH',
+  'KING',
+  'UNIVIEW',
+  'CHINT',
+  'JADEVER',
+  'DCK',
+]);
+
+const FORMULA_3_BRANDS = new Set(['WEIDMULLER']);
+
+export function scalarToString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  return '';
+}
 
 /**
  * Convierte a número tolerando formatos $ 1.234,56 o 1,234.56, etc.
  */
 export function toNumber(value: unknown): number {
-  const raw = String(value == null ? '' : value).trim();
+  const raw = scalarToString(value).trim();
   if (raw === '') return 0;
-  let s = raw.replace(/[^\d,.\-]/g, '');
+  let s = raw.replace(/[^\d,.-]/g, '');
 
   const hasComma = s.includes(',');
   const hasDot = s.includes('.');
@@ -34,66 +55,94 @@ export function getDiscountPercent(): number {
   return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_DISCOUNT_PERCENT;
 }
 
-export function getMeliSellerId(): string {
-  const sellerId = String(
-    process.env.MELI_SELLER_ID ?? DEFAULT_MELI_SELLER_ID,
-  ).trim();
-  return sellerId || DEFAULT_MELI_SELLER_ID;
+export function parseIvaRate(impuestos: unknown): number | null {
+  const raw = scalarToString(impuestos).trim().toUpperCase().replace(',', '.');
+  if (raw === 'IVA_21') return 0.21;
+  if (raw === 'IVA_10.5') return 0.105;
+  return null;
+}
+
+export function normalizeBrand(marca: unknown): string {
+  return scalarToString(marca).trim().toUpperCase();
+}
+
+export type PricingFormula = 1 | 2 | 3;
+
+export function marginForFormula(formula: PricingFormula): number {
+  if (formula === 2) return FORMULA_2_MARGIN;
+  if (formula === 3) return FORMULA_3_MARGIN;
+  return FORMULA_1_MARGIN;
+}
+
+/**
+ * Si la marca está en la fórmula 1, gana esa. No hay dato de línea para
+ * distinguir Chint industrial, Macroled Skyline ni Uniview analógica.
+ */
+export function formulaForBrand(marca: unknown): PricingFormula | null {
+  const brand = normalizeBrand(marca);
+  if (!brand) return null;
+  if (FORMULA_1_BRANDS.has(brand)) return 1;
+  if (FORMULA_3_BRANDS.has(brand)) return 3;
+  return null;
+}
+
+export function packQuantity(cantIntermedia: unknown): number {
+  const qty = toNumber(cantIntermedia);
+  return qty > 0 ? qty : 1;
 }
 
 export function calculateCoresaPriceArs(
   precioListaUsd: unknown,
+  cantIntermedia: unknown,
   usdBna: number,
+  ivaRate: number,
+  marginRate: number,
   discountPercent: number = DEFAULT_DISCOUNT_PERCENT,
 ): number | null {
   const priceUsd = toNumber(precioListaUsd);
   if (!(priceUsd > 0) || !(usdBna > 0)) return null;
+  if (!(ivaRate >= 0) || !(marginRate >= 0)) return null;
 
   const discountRate = 1 - discountPercent / 100;
-  const usdDesc = priceUsd * discountRate;
-  const usdIva = usdDesc * (1 + IVA_RATE);
-  const usdMargin = usdIva * (1 + MARGIN_RATE);
-  return Math.round(usdMargin * usdBna);
+  const packUsd = priceUsd * packQuantity(cantIntermedia);
+  const price = Math.round(
+    packUsd * usdBna * discountRate * (1 + ivaRate) * (1 + marginRate),
+  );
+  return price > 0 ? price : null;
 }
 
-export function calculateCoresaStock(
-  disponible: unknown,
-  cantIntermedia: unknown,
-): number {
-  const stock = toNumber(disponible);
-  const cantInter = toNumber(cantIntermedia);
-  if (!cantInter) return Math.floor(stock);
-  return Math.floor(stock / cantInter);
+export function totalStock(disponible: unknown): number {
+  return Math.floor(toNumber(disponible));
 }
 
-export function mapCoresaToMeliListing(
+export function priceCoresaProduct(
   product: CoresaProduct,
-  meli_item_id: string,
   usdBna: number,
-  sellerId: string,
   discountPercent: number = DEFAULT_DISCOUNT_PERCENT,
-): MeliListingProduct | null {
-  const itemId = String(meli_item_id ?? '').trim();
-  if (!itemId) return null;
+): CoresaProduct | null {
+  const sku = String(product.SKU ?? '').trim();
+  if (!sku) return null;
+
+  const ivaRate = parseIvaRate(product.Impuestos);
+  if (ivaRate === null) return null;
+
+  const formula = formulaForBrand(product.Marca);
+  if (formula === null) return null;
 
   const price = calculateCoresaPriceArs(
     product.Precio_Lista_1,
+    product.CantIntermedia,
     usdBna,
+    ivaRate,
+    marginForFormula(formula),
     discountPercent,
   );
   if (price === null) return null;
 
   return {
-    meli_item_id: itemId,
-    seller_id: sellerId,
-    sku: String(product.SKU ?? '').trim(),
-    title: String(product.Descripcion ?? '').trim(),
-    price,
-    available_quantity: calculateCoresaStock(
-      product.Disponible,
-      product.CantIntermedia,
-    ),
-    status: 'active',
-    raw_payload: {},
+    ...product,
+    SKU: sku,
+    Precio_Convertido: price,
+    Disponible: totalStock(product.Disponible),
   };
 }

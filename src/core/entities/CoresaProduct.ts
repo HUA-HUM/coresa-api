@@ -13,6 +13,7 @@ export class CoresaProduct {
   Minimo_Venta?: boolean;
   Venta_Unitaria?: boolean;
   Precio_Lista_1?: number | string;
+  Precio_Convertido?: number;
   Impuestos?: string;
   Moneda?: string;
   CantMaster?: number | string;

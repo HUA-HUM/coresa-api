@@ -16,60 +16,140 @@ describe('APIInternalApiRepository', () => {
     process.env = originalEnv;
   });
 
-  it('envía productos en chunks al endpoint bulk con ambos headers de API key', async () => {
+  it('envía productos Coresa en chunks al bulk con ambos headers de API key', async () => {
     const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
     const repo = new APIInternalApiRepository({ request } as never);
-
     const product = {
-      meli_item_id: 'MLA123',
-      seller_id: '6863691',
-      sku: 'MFTBLP2',
-      title: 'Producto ejemplo',
-      price: 95000,
-      available_quantity: 12,
-      status: 'active',
-      raw_payload: {},
+      SKU: 'MFTBLP2',
+      Precio_Lista_1: 998250,
+      Disponible: 12,
+      Moneda: 'ARS',
     };
 
-    await repo.upsertProducts([product]);
+    await repo.upsertCoresaProducts([product]);
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',
-        url: 'https://internal.example.com/internal/mercadolibre/products/bulk',
+        url: 'https://internal.example.com/internal/coresa/products/bulk',
         data: { products: [product] },
-        headers: expect.objectContaining({
-          'x-api-key': '_internal',
-          'x-internal-api-key': '_internal',
-        }),
       }),
     );
+    const config = (
+      request.mock.calls as Array<[{ headers: Record<string, string> }]>
+    )[0][0];
+    expect(config.headers['x-api-key']).toBe('_internal');
+    expect(config.headers['x-internal-api-key']).toBe('_internal');
   });
 
-  it('consulta by-sku y mapea meli_item_id / status', async () => {
+  it('no llama al bulk si no hay productos', async () => {
+    const request = jest.fn();
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await repo.upsertCoresaProducts([]);
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('lista coresa_products_in_mercadolibre', async () => {
     const request = jest.fn().mockResolvedValue({
       status: 200,
-      data: { sku: 'MFTBLP2', status: 'active', meli_item_id: 'MLA123' },
+      data: {
+        products: [
+          {
+            SKU: 'A',
+            MLA: 'MLA1',
+            update_stock: false,
+            update_price: 'true',
+            created_at: '2026-01-01',
+          },
+          { sku: '', mla: 'MLA2' },
+        ],
+      },
     });
     const repo = new APIInternalApiRepository({ request } as never);
 
-    const product = await repo.getProductBySku('MFTBLP2');
+    const links = await repo.listCoresaProductsInMercadoLibre();
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'GET',
-        url: 'https://internal.example.com/internal/mercadolibre/products/by-sku/MFTBLP2',
-        params: {},
-        headers: expect.objectContaining({
-          'x-api-key': '_internal',
-          'x-internal-api-key': '_internal',
-        }),
+        url: 'https://internal.example.com/internal/coresa/products-in-mercadolibre',
+        params: { page: 1, limit: 200 },
       }),
     );
-    expect(product).toEqual({
-      sku: 'MFTBLP2',
-      status: 'active',
-      meli_item_id: 'MLA123',
+    expect(links).toEqual([
+      {
+        sku: 'A',
+        mla: 'MLA1',
+        updateStock: false,
+        updatePrice: true,
+        createdAt: '2026-01-01',
+      },
+    ]);
+  });
+
+  it('recorre todas las páginas de products-in-mercadolibre', async () => {
+    process.env.INTERNAL_API_PAGE_LIMIT = '1';
+    const request = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          products: [
+            { sku: 'A', mla: 'MLA1', updateStock: true, updatePrice: true },
+          ],
+          meta: { total: 2 },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          products: [
+            { sku: 'B', mla: 'MLA2', update_stock: false, update_price: false },
+          ],
+          meta: { total: 2 },
+        },
+      });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    const links = await repo.listCoresaProductsInMercadoLibre();
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ params: { page: 1, limit: 1 } }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ params: { page: 2, limit: 1 } }),
+    );
+    expect(links.map((link) => link.sku)).toEqual(['A', 'B']);
+  });
+
+  it('consulta coresa by-sku y mercadolibre by-mla', async () => {
+    const request = jest.fn((config: { url: string }) => {
+      if (config.url.includes('/coresa/products/by-sku/')) {
+        return {
+          status: 200,
+          data: { data: { SKU: 'MFTBLP2', Precio_Lista_1: 10, Disponible: 4 } },
+        };
+      }
+      return {
+        status: 200,
+        data: { mla: 'MLA 1', price: '1.234,56', available_quantity: 8 },
+      };
+    });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(repo.getCoresaProductBySku('MFTBLP2')).resolves.toMatchObject({
+      SKU: 'MFTBLP2',
+      Precio_Lista_1: 10,
+      Disponible: 4,
+    });
+    await expect(repo.getMercadoLibreProductByMla('MLA 1')).resolves.toEqual({
+      meli_item_id: 'MLA 1',
+      price: 1234.56,
+      available_quantity: 8,
     });
   });
 
@@ -81,16 +161,7 @@ describe('APIInternalApiRepository', () => {
     const request = jest.fn().mockRejectedValue(err);
     const repo = new APIInternalApiRepository({ request } as never);
 
-    await expect(repo.getProductBySku('MISSING')).resolves.toBeNull();
-  });
-
-  it('no llama al /bulk si no hay productos', async () => {
-    const request = jest.fn();
-    const repo = new APIInternalApiRepository({ request } as never);
-
-    await repo.upsertProducts([]);
-
-    expect(request).not.toHaveBeenCalled();
+    await expect(repo.getCoresaProductBySku('MISSING')).resolves.toBeNull();
+    await expect(repo.getMercadoLibreProductByMla('MLA0')).resolves.toBeNull();
   });
 });
-

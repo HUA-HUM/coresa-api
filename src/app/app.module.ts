@@ -9,12 +9,13 @@ import { NestExchangeRateRepository } from './drivers/NestExchangeRateRepository
 import { NestInternalApiRepository } from './drivers/NestInternalApiRepository';
 import { NestMeliApiRepository } from './drivers/NestMeliApiRepository';
 import { SyncCoresaCatalogProcess } from './processes/SyncCoresaCatalog.process';
+import { SyncCoresaProductsToMercadoLibreProcess } from './processes/SyncCoresaProductsToMercadoLibre.process';
 import { ICoresaRepositoryToken } from '../core/adapters/repositories/ICoresaRepository';
 import { IExchangeRateRepositoryToken } from '../core/adapters/repositories/IExchangeRateRepository';
 import { IInternalApiRepositoryToken } from '../core/adapters/repositories/IInternalApiRepository';
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { SyncCoresaCatalog } from '../core/interactors/coresa/SyncCoresaCatalog';
-import { SyncCoresaProductsToInternalApi } from '../core/interactors/coresa/SyncCoresaProductsToInternalApi';
+import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/SyncCoresaProductsToMercadoLibreApi';
 
 @Module({
   imports: [
@@ -43,8 +44,9 @@ import { SyncCoresaProductsToInternalApi } from '../core/interactors/coresa/Sync
       useClass: NestExchangeRateRepository,
     },
     SyncCoresaCatalog,
-    SyncCoresaProductsToInternalApi,
+    SyncCoresaProductsToMercadoLibreApi,
     SyncCoresaCatalogProcess,
+    SyncCoresaProductsToMercadoLibreProcess,
   ],
 })
 export class AppModule {}
