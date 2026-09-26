@@ -47,12 +47,15 @@ export class ProductsCoresaController {
   @Post('sync-meli')
   @ApiOperation({
     summary:
-      'coresa_products_in_mercadolibre vs mercadolibre_products → actualiza precio y/o stock según updatePrice y updateStock',
+      'coresa_products_in_mercadolibre vs mercadolibre_products → actualiza precio y/o stock, y registra cada cambio en internal-api',
+    description:
+      'Devuelve el detalle por publicación: updated (ML lo aplicó), not_applied (ML aceptó pero no cambió), unchanged, skipped o failed.',
   })
   @ApiOkResponse({ description: 'Publicaciones Mercado Libre sincronizadas' })
   async syncMeli() {
     this.logger.log('Trigger local: sync de productos Coresa a Mercado Libre');
-    const result = await this.syncCoresaProductsToMercadoLibre.execute();
+    const result =
+      await this.syncCoresaProductsToMercadoLibre.execute('manual');
     return {
       message: 'Productos Coresa sincronizados en Mercado Libre',
       ...result,

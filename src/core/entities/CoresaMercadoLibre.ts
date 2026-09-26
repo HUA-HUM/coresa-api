@@ -20,6 +20,39 @@ export type MeliListingUpdate = {
   available_quantity?: number;
 };
 
+/**
+ * Lo que devuelve meli-api al actualizar: "applied" es lo que quedó cargado
+ * en ML, que no siempre es lo que se pidió (ítems con variaciones,
+ * publicaciones de catálogo, topes de precio).
+ */
+export type MeliListingUpdateResult = {
+  meli_item_id: string;
+  status?: string;
+  sub_status?: string[];
+  requested?: MeliListingUpdate;
+  applied?: MeliListingUpdate | null;
+  changed: boolean;
+};
+
+export type SyncChangeResult = 'updated' | 'not_applied' | 'failed';
+
+/** Una fila del historial de cambios de precio y stock. */
+export type CoresaSyncChange = {
+  sku: string;
+  mla: string;
+  result: SyncChangeResult;
+  priceBefore?: number | null;
+  priceRequested?: number | null;
+  priceApplied?: number | null;
+  stockBefore?: number | null;
+  stockRequested?: number | null;
+  stockApplied?: number | null;
+  meliStatus?: string | null;
+  meliSubStatus?: string[] | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+};
+
 function unwrapObject(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
