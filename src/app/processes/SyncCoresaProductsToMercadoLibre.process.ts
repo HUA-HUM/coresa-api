@@ -15,6 +15,6 @@ export class SyncCoresaProductsToMercadoLibreProcess {
   @Cron('15 * * * *')
   async handleCron() {
     this.logger.log('Cron ejecutando sync de productos Coresa a Mercado Libre');
-    await this.syncCoresaProductsToMercadoLibre.execute();
+    await this.syncCoresaProductsToMercadoLibre.execute('cron');
   }
 }
