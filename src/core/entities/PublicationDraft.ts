@@ -26,6 +26,8 @@ export class PublicationDraft {
   sale_terms?: DraftAttribute[];
   shipping: DraftShipping;
   description: string;
+  /** Por ahora solo clásica. meli-api publica los dos tipos si no se le dice. */
+  listing_types?: string[];
 }
 
 export class ListingValidation {

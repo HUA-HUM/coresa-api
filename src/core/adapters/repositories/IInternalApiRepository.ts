@@ -22,6 +22,11 @@ export interface IInternalApiRepository {
     summary: unknown,
     errorMessage?: string | null,
   ): Promise<void>;
+  upsertProductInMercadoLibre(
+    sku: string,
+    mla: string,
+    flags?: { updatePrice?: boolean; updateStock?: boolean },
+  ): Promise<void>;
   recordSyncChanges(
     runId: number | null,
     source: 'cron' | 'manual',

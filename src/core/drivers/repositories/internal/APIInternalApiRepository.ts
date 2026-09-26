@@ -304,6 +304,28 @@ export class APIInternalApiRepository {
     return inserted;
   }
 
+  /**
+   * Deja el SKU vinculado a la publicación para que el actualizador le
+   * mantenga precio y stock. Es un upsert por (sku, mla).
+   */
+  async upsertProductInMercadoLibre(
+    sku: string,
+    mla: string,
+    flags: { updatePrice?: boolean; updateStock?: boolean } = {},
+  ): Promise<void> {
+    const config = this.prepareRequest(
+      '/internal/coresa/products-in-mercadolibre',
+      {},
+      {
+        sku,
+        mla,
+        updatePrice: flags.updatePrice ?? true,
+        updateStock: flags.updateStock ?? true,
+      },
+    );
+    await this.request(config);
+  }
+
   private warnRegistro(mensaje: string, err: unknown): void {
     const detalle = err instanceof Error ? err.message : String(err);
     this.logger.warn(`[internal-api] ${mensaje}: ${detalle}`);

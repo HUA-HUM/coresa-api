@@ -67,14 +67,27 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
       .mockResolvedValue({ id: 7, sku: 'PC12NW', status: 'ready' }),
     getBySku: jest.fn(),
   };
-  const exchangeRate = { getUsdBnaSell: jest.fn().mockResolvedValue(1000) };
+  const internalApi = {
+    upsertCoresaProducts: jest.fn(),
+    listCoresaProductsInMercadoLibre: jest.fn(),
+    getCoresaProductBySku: jest.fn().mockResolvedValue({
+      SKU: 'PC12NW',
+      Precio_Convertido: 9983,
+      Disponible: 100,
+    }),
+    getMercadoLibreProductByMla: jest.fn(),
+    upsertProductInMercadoLibre: jest.fn(),
+    startProcessRun: jest.fn(),
+    finishProcessRun: jest.fn(),
+    recordSyncChanges: jest.fn(),
+  };
 
   return {
     coresaRepo,
     meliPublish,
     enrichment,
     publications,
-    exchangeRate,
+    internalApi,
     ...overrides,
   };
 }
@@ -85,7 +98,7 @@ function buildInteractor(deps: ReturnType<typeof buildDeps>) {
     deps.meliPublish as never,
     deps.enrichment as never,
     deps.publications as never,
-    deps.exchangeRate as never,
+    deps.internalApi as never,
   );
 }
 

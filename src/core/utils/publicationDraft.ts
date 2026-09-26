@@ -1,7 +1,11 @@
 import { EnrichedProductContent } from '../adapters/repositories/IProductEnrichmentRepository';
 import { CoresaProduct } from '../entities/CoresaProduct';
-import { DraftAttribute, PublicationDraft } from '../entities/PublicationDraft';
-import { priceCoresaProduct, toNumber } from './coresaPriceStock';
+import {
+  DraftAttribute,
+  LISTING_TYPE_CLASSIC,
+  PublicationDraft,
+} from '../entities/PublicationDraft';
+import { toNumber } from './coresaPriceStock';
 
 export const DEFAULT_WARRANTY_TYPE = 'Garantía del vendedor';
 export const DEFAULT_WARRANTY_TIME = '6 meses';
@@ -138,29 +142,26 @@ export function buildPictures(product: CoresaProduct): string[] {
   return url ? [url].slice(0, MAX_PICTURES) : [];
 }
 
+/**
+ * El precio y el stock salen de coresa_products, donde el sync de catálogo
+ * ya los dejó calculados; acá no se recalcula nada.
+ */
 export function buildPublicationDraft(params: {
   product: CoresaProduct;
   categoryId: string;
   content: EnrichedProductContent;
-  usdBna: number;
-  discountPercent: number;
+  price: number;
+  availableQuantity: number;
   allowedAttributeIds: Set<string>;
 }): PublicationDraft {
-  const { product, categoryId, content, usdBna, discountPercent } = params;
-
-  const priced = priceCoresaProduct(product, usdBna, discountPercent);
-  if (priced?.Precio_Convertido == null) {
-    throw new Error(
-      `[coresa] SKU ${String(product.SKU ?? '')} sin precio de lista válido`,
-    );
-  }
+  const { product, categoryId, content, price, availableQuantity } = params;
 
   return {
     sku: String(product.SKU ?? '').trim(),
     title: content.title,
     category_id: categoryId,
-    price: priced.Precio_Convertido,
-    available_quantity: Number(priced.Disponible ?? 0),
+    price,
+    available_quantity: availableQuantity,
     condition: 'new',
     pictures: buildPictures(product),
     attributes: [
@@ -181,5 +182,6 @@ export function buildPublicationDraft(params: {
       free_shipping: getFreeShipping(),
     },
     description: content.description,
+    listing_types: [LISTING_TYPE_CLASSIC],
   };
 }
