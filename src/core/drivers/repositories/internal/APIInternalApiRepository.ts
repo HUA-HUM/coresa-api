@@ -1,7 +1,9 @@
+import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { CoresaProduct } from '../../../entities/CoresaProduct';
 import {
   CoresaProductInMercadoLibre,
+  CoresaSyncChange,
   MercadoLibreProductSnapshot,
   mapCoresaProduct,
   mapCoresaProductsInMercadoLibre,
@@ -10,6 +12,8 @@ import {
 } from '../../../entities/CoresaMercadoLibre';
 
 export class APIInternalApiRepository {
+  private readonly logger = new Logger(APIInternalApiRepository.name);
+
   constructor(private readonly axios: AxiosInstance) {}
 
   private get apiUrl(): string {
@@ -33,6 +37,11 @@ export class APIInternalApiRepository {
   private get pageLimit(): number {
     const limit = Number(process.env.INTERNAL_API_PAGE_LIMIT ?? 200);
     return Number.isFinite(limit) && limit > 0 ? limit : 200;
+  }
+
+  private get syncChangesChunkSize(): number {
+    const size = Number(process.env.INTERNAL_API_CHANGES_CHUNK_SIZE ?? 500);
+    return Number.isFinite(size) && size > 0 ? size : 500;
   }
 
   private get requestRetries(): number {
@@ -217,5 +226,86 @@ export class APIInternalApiRepository {
     );
     if (payload === null) return null;
     return mapMercadoLibreProductSnapshot(payload);
+  }
+
+  /**
+   * Abre la corrida en process_runs. Si internal-api no responde, la
+   * sincronización tiene que seguir igual: el registro es para auditar, no
+   * puede ser el que rompa el proceso.
+   */
+  async startProcessRun(
+    processName: string,
+    triggerType: 'cron' | 'manual',
+  ): Promise<number | null> {
+    try {
+      const config = this.prepareRequest(
+        '/internal/process-runs',
+        {},
+        { processName, triggerType },
+      );
+      const response = await this.request(config);
+      const id = Number((response.data as { id?: number })?.id);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    } catch (err) {
+      this.warnRegistro('no se pudo abrir la corrida', err);
+      return null;
+    }
+  }
+
+  async finishProcessRun(
+    id: number,
+    status: 'completed' | 'failed',
+    summary: unknown,
+    errorMessage?: string | null,
+  ): Promise<void> {
+    try {
+      const config = this.prepareRequest(
+        `/internal/process-runs/${id}`,
+        {},
+        { status, summary, errorMessage: errorMessage ?? null },
+      );
+      config.method = 'PATCH';
+      await this.request(config);
+    } catch (err) {
+      this.warnRegistro(`no se pudo cerrar la corrida ${id}`, err);
+    }
+  }
+
+  /**
+   * Historial de cambios de precio y stock. Se manda en lotes; devuelve
+   * cuántas filas quedaron registradas. Si el endpoint todavía no existe
+   * (404), no se registra nada y el sync sigue.
+   */
+  async recordSyncChanges(
+    runId: number | null,
+    source: 'cron' | 'manual',
+    changes: CoresaSyncChange[],
+  ): Promise<number> {
+    if (changes.length === 0) return 0;
+
+    let inserted = 0;
+    for (const batch of this.chunk(changes, this.syncChangesChunkSize)) {
+      try {
+        const config = this.prepareRequest(
+          '/internal/coresa/meli-sync-changes/bulk',
+          {},
+          { runId, source, changes: batch },
+        );
+        const response = await this.request(config);
+        const count = Number(
+          (response.data as { inserted?: number })?.inserted ?? batch.length,
+        );
+        inserted += Number.isFinite(count) ? count : batch.length;
+      } catch (err) {
+        this.warnRegistro('no se pudieron registrar los cambios', err);
+        break;
+      }
+    }
+    return inserted;
+  }
+
+  private warnRegistro(mensaje: string, err: unknown): void {
+    const detalle = err instanceof Error ? err.message : String(err);
+    this.logger.warn(`[internal-api] ${mensaje}: ${detalle}`);
   }
 }
