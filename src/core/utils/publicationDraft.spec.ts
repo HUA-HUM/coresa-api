@@ -30,18 +30,17 @@ function build(allowed: string[] = ['BRAND', 'MODEL', 'GTIN', 'COLOR']) {
     product,
     categoryId: 'MLA1591',
     content,
-    usdBna: 1000,
-    discountPercent: 50,
+    price: 1777,
+    availableQuantity: 1050,
     allowedAttributeIds: new Set(allowed),
   });
 }
 
 describe('buildPublicationDraft', () => {
-  it('calcula precio y stock con la fórmula de Coresa', () => {
+  it('toma el precio y el stock ya calculados de coresa_products', () => {
     const draft = build();
 
-    // Weidmuller fórmula 3: 1.78 * 1 * 1000 * 0.5 * 1.21 * 1.5
-    expect(draft.price).toBe(1615);
+    expect(draft.price).toBe(1777);
     expect(draft.available_quantity).toBe(1050);
   });
 
@@ -76,31 +75,39 @@ describe('buildPublicationDraft', () => {
     ]);
   });
 
-  it('falla si el producto no tiene precio de lista', () => {
-    expect(() =>
-      buildPublicationDraft({
-        product: { ...product, Precio_Lista_1: 0 },
-        categoryId: 'MLA1591',
-        content,
-        usdBna: 1000,
-        discountPercent: 50,
-        allowedAttributeIds: new Set(['BRAND']),
-      }),
-    ).toThrow(/sin precio de lista/);
+  it('usa el precio y el stock que le pasan, sin recalcular', () => {
+    // Vienen de coresa_products; el producto crudo trae otros valores.
+    const draft = buildPublicationDraft({
+      product: { ...product, Precio_Lista_1: 999, Disponible: 7 },
+      categoryId: 'MLA1591',
+      content,
+      price: 45000,
+      availableQuantity: 12,
+      allowedAttributeIds: new Set(['BRAND']),
+    });
+
+    expect(draft.price).toBe(45000);
+    expect(draft.available_quantity).toBe(12);
   });
 
-  it('guarda el stock total y multiplica el precio por el empaque', () => {
+  it('publica solo como clásica', () => {
+    expect(build().listing_types).toEqual(['gold_special']);
+  });
+
+  it('mantiene el resto del borrador al cambiar precio y stock', () => {
     const draft = buildPublicationDraft({
       product: { ...product, Disponible: 100, CantIntermedia: 6 },
       categoryId: 'MLA1591',
       content,
-      usdBna: 1000,
-      discountPercent: 50,
+      price: 1777,
+      availableQuantity: 1050,
       allowedAttributeIds: new Set(['BRAND']),
     });
 
-    expect(draft.available_quantity).toBe(100);
-    expect(draft.price).toBe(Math.round(1.78 * 6 * 1000 * 0.5 * 1.21 * 1.5));
+    expect(draft.available_quantity).toBe(1050);
+    expect(draft.price).toBe(1777);
+    expect(draft.sku).toBe('AEB 35 SC/1');
+    expect(draft.category_id).toBe('MLA1591');
   });
 
   it('toma el código de barras unitario como GTIN cuando es válido', () => {
@@ -152,8 +159,8 @@ describe('atributos de paquete e impuestos', () => {
       },
       categoryId: 'MLA1591',
       content,
-      usdBna: 1000,
-      discountPercent: 50,
+      price: 1777,
+      availableQuantity: 1050,
       allowedAttributeIds: new Set(['BRAND']),
     });
     const ids = draft.attributes.map((attribute) => attribute.id);
@@ -179,8 +186,8 @@ describe('atributos de paquete e impuestos', () => {
       },
       categoryId: 'MLA1591',
       content,
-      usdBna: 1000,
-      discountPercent: 50,
+      price: 1777,
+      availableQuantity: 1050,
       allowedAttributeIds: new Set<string>(),
     });
     const paquete = Object.fromEntries(
@@ -198,8 +205,8 @@ describe('atributos de paquete e impuestos', () => {
       product: { ...product, Peso_kg: 0 },
       categoryId: 'MLA1591',
       content,
-      usdBna: 1000,
-      discountPercent: 50,
+      price: 1777,
+      availableQuantity: 1050,
       allowedAttributeIds: new Set<string>(),
     });
 
@@ -221,8 +228,8 @@ describe('atributos de paquete e impuestos', () => {
       product: { ...product, Impuestos: 'IVA_21' },
       categoryId: 'MLA1591',
       content,
-      usdBna: 1000,
-      discountPercent: 50,
+      price: 1777,
+      availableQuantity: 1050,
       allowedAttributeIds: new Set(['VALUE_ADDED_TAX', 'IMPORT_DUTY']),
     });
     const porId = Object.fromEntries(

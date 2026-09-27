@@ -42,6 +42,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
         price: 100,
         available_quantity: 1,
       }),
+      upsertProductInMercadoLibre: jest.fn(),
       startProcessRun: jest.fn().mockResolvedValue(812),
       finishProcessRun: jest.fn().mockResolvedValue(undefined),
       recordSyncChanges: jest
@@ -271,6 +272,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
 
   it('sigue funcionando si internal-api no pudo abrir la corrida', async () => {
     const internalApi = repo({
+      upsertProductInMercadoLibre: jest.fn(),
       startProcessRun: jest.fn().mockResolvedValue(null),
       listCoresaProductsInMercadoLibre: jest
         .fn()

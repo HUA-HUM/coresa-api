@@ -14,6 +14,19 @@ const draft: PublicationDraft = {
   description: 'Descripción generada.',
 };
 
+function buildInternalApi() {
+  return {
+    upsertCoresaProducts: jest.fn(),
+    listCoresaProductsInMercadoLibre: jest.fn(),
+    getCoresaProductBySku: jest.fn(),
+    getMercadoLibreProductByMla: jest.fn(),
+    upsertProductInMercadoLibre: jest.fn().mockResolvedValue(undefined),
+    startProcessRun: jest.fn(),
+    finishProcessRun: jest.fn(),
+    recordSyncChanges: jest.fn(),
+  };
+}
+
 function buildDeps() {
   const meliPublish = {
     predictCategories: jest.fn(),
@@ -46,13 +59,14 @@ function buildDeps() {
     }),
     getBySku: jest.fn(),
   };
-  return { meliPublish, publications };
+  return { meliPublish, publications, internalApi: buildInternalApi() };
 }
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
   return new PublishCoresaPublication(
     deps.meliPublish as never,
     deps.publications as never,
+    deps.internalApi as never,
   );
 }
 
@@ -107,7 +121,7 @@ describe('PublishCoresaPublication', () => {
     });
   });
 
-  it('queda en partial si ML rechazó uno de los dos tipos', async () => {
+  it('queda published aunque meli-api informe error en la premium, que ya no se pide', async () => {
     const deps = buildDeps();
     deps.meliPublish.createItem.mockResolvedValue({
       sku: 'PC12NW',
@@ -125,16 +139,53 @@ describe('PublishCoresaPublication', () => {
 
     const result = await buildInteractor(deps).execute({ publicationId: 7 });
 
-    expect(result.status).toBe('partial');
+    expect(result.status).toBe('published');
+    expect(result.classicItemId).toBe('MLA111');
     expect(result.premiumItemId).toBeNull();
-    expect(deps.publications.update).toHaveBeenNthCalledWith(
-      2,
-      7,
-      expect.objectContaining({
-        status: 'partial',
-        errorMessage: 'gold_pro: The attributes [MODEL] are required',
-      }),
+  });
+
+  it('queda failed si no salió la clásica', async () => {
+    const deps = buildDeps();
+    deps.meliPublish.createItem.mockResolvedValue({
+      sku: 'PC12NW',
+      results: {
+        gold_special: {
+          ok: false,
+          error: { message: 'validation_error', cause: [] },
+        },
+      },
+    });
+
+    const result = await buildInteractor(deps).execute({ publicationId: 7 });
+
+    expect(result.status).toBe('failed');
+    expect(result.linkedForSync).toBe(false);
+    expect(deps.internalApi.upsertProductInMercadoLibre).not.toHaveBeenCalled();
+  });
+
+  it('vincula la publicación al actualizador con las dos banderas prendidas', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({ publicationId: 7 });
+
+    expect(deps.internalApi.upsertProductInMercadoLibre).toHaveBeenCalledWith(
+      'PC12NW',
+      'MLA111',
+      { updatePrice: true, updateStock: true },
     );
+    expect(result.linkedForSync).toBe(true);
+  });
+
+  it('si no se pudo vincular, la publicación igual queda hecha', async () => {
+    const deps = buildDeps();
+    deps.internalApi.upsertProductInMercadoLibre.mockRejectedValue(
+      new Error('internal-api caído'),
+    );
+
+    const result = await buildInteractor(deps).execute({ publicationId: 7 });
+
+    expect(result.status).toBe('published');
+    expect(result.linkedForSync).toBe(false);
   });
 
   it('toma el ID de un conflicto como publicación existente', async () => {

@@ -14,9 +14,9 @@ import {
   ICoresaPublicationRepositoryToken,
 } from '../../adapters/repositories/ICoresaPublicationRepository';
 import {
-  IExchangeRateRepository,
-  IExchangeRateRepositoryToken,
-} from '../../adapters/repositories/IExchangeRateRepository';
+  IInternalApiRepository,
+  IInternalApiRepositoryToken,
+} from '../../adapters/repositories/IInternalApiRepository';
 import {
   IMeliPublishRepository,
   IMeliPublishRepositoryToken,
@@ -31,7 +31,7 @@ import {
   PublicationDraft,
   PublicationValidation,
 } from '../../entities/PublicationDraft';
-import { getDiscountPercent } from '../../utils/coresaPriceStock';
+import { toNumber } from '../../utils/coresaPriceStock';
 import { missingRequiredAttributes } from '../../utils/enrichment';
 import { buildPublicationDraft } from '../../utils/publicationDraft';
 
@@ -65,8 +65,8 @@ export class PreviewCoresaPublication {
     private readonly enrichment: IProductEnrichmentRepository,
     @Inject(ICoresaPublicationRepositoryToken)
     private readonly publications: ICoresaPublicationRepository,
-    @Inject(IExchangeRateRepositoryToken)
-    private readonly exchangeRate: IExchangeRateRepository,
+    @Inject(IInternalApiRepositoryToken)
+    private readonly internalApi: IInternalApiRepository,
   ) {}
 
   /** Permite trabajar en local mientras internal-api todavía no tiene la tabla. */
@@ -102,17 +102,17 @@ export class PreviewCoresaPublication {
     const categoryAttributes =
       await this.meliPublish.getCategoryAttributes(categoryId);
 
-    const [content, usdBna] = await Promise.all([
+    const [content, priceAndStock] = await Promise.all([
       this.enrichment.buildContent(product, categoryAttributes),
-      this.exchangeRate.getUsdBnaSell(),
+      this.priceAndStockFor(sku),
     ]);
 
     const draft = buildPublicationDraft({
       product,
       categoryId,
       content,
-      usdBna,
-      discountPercent: getDiscountPercent(),
+      price: priceAndStock.price,
+      availableQuantity: priceAndStock.availableQuantity,
       allowedAttributeIds: new Set(
         categoryAttributes.map((attribute) => attribute.id),
       ),
@@ -149,6 +149,35 @@ export class PreviewCoresaPublication {
         categoryAttributes,
       ),
       status: publication?.status ?? (isValid ? 'ready' : 'draft'),
+    };
+  }
+
+  /**
+   * Precio y stock salen de coresa_products, que es lo que el sync de
+   * catálogo deja calculado y lo que después el actualizador mantiene. Si el
+   * SKU no está ahí, no se publica: publicarlo con otro precio dejaría la
+   * publicación desincronizada desde el primer día.
+   */
+  private async priceAndStockFor(
+    sku: string,
+  ): Promise<{ price: number; availableQuantity: number }> {
+    const stored = await this.internalApi.getCoresaProductBySku(sku);
+    if (!stored) {
+      throw new BadRequestException(
+        `El SKU ${sku} no está en coresa_products. Corré el sync de catálogo (POST /coresa/sync) antes de publicarlo.`,
+      );
+    }
+
+    const price = Math.round(toNumber(stored.Precio_Convertido));
+    if (!(price > 0)) {
+      throw new BadRequestException(
+        `El SKU ${sku} está en coresa_products sin precio calculado. Suele ser una marca sin fórmula de precio asignada.`,
+      );
+    }
+
+    return {
+      price,
+      availableQuantity: Math.floor(toNumber(stored.Disponible)),
     };
   }
 

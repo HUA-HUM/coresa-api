@@ -10,6 +10,10 @@ import {
   ICoresaPublicationRepositoryToken,
 } from '../../adapters/repositories/ICoresaPublicationRepository';
 import {
+  IInternalApiRepository,
+  IInternalApiRepositoryToken,
+} from '../../adapters/repositories/IInternalApiRepository';
+import {
   IMeliPublishRepository,
   IMeliPublishRepositoryToken,
 } from '../../adapters/repositories/IMeliPublishRepository';
@@ -35,6 +39,8 @@ export class PublishCoresaPublicationResult {
   classicItemId: string | null;
   premiumItemId: string | null;
   permalink: string | null;
+  /** Si quedó registrado en coresa_products_in_mercadolibre. */
+  linkedForSync: boolean;
   results: Record<string, ListingCreation>;
 }
 
@@ -47,6 +53,8 @@ export class PublishCoresaPublication {
     private readonly meliPublish: IMeliPublishRepository,
     @Inject(ICoresaPublicationRepositoryToken)
     private readonly publications: ICoresaPublicationRepository,
+    @Inject(IInternalApiRepositoryToken)
+    private readonly internalApi: IInternalApiRepository,
   ) {}
 
   private get registryEnabled(): boolean {
@@ -85,6 +93,14 @@ export class PublishCoresaPublication {
     const status = this.resolveStatus(classicItemId, premiumItemId);
     const permalink = classic?.permalink ?? premium?.permalink ?? null;
 
+    if (premiumItemId && !premium?.conflict) {
+      this.logger.warn(
+        `[publish] SKU ${draft.sku}: se pidió solo clásica y meli-api creó también la premium ${premiumItemId}`,
+      );
+    }
+
+    const linkedForSync = await this.linkForSync(draft.sku, classicItemId);
+
     if (this.registryEnabled) {
       await this.publications.update(input.publicationId, {
         status,
@@ -109,6 +125,7 @@ export class PublishCoresaPublication {
       classicItemId,
       premiumItemId,
       permalink,
+      linkedForSync,
       results: creation.results ?? {},
     };
   }
@@ -180,13 +197,42 @@ export class PublishCoresaPublication {
     return itemId || null;
   }
 
+  /**
+   * Hoy se publica solo la clásica: si salió, la publicación está completa.
+   * Si meli-api todavía crea las dos, la premium se registra igual pero no
+   * define el estado.
+   */
   private resolveStatus(
     classicItemId: string | null,
     premiumItemId: string | null,
   ): CoresaPublicationStatus {
-    if (classicItemId && premiumItemId) return 'published';
-    if (classicItemId || premiumItemId) return 'partial';
+    if (classicItemId) return 'published';
+    if (premiumItemId) return 'partial';
     return 'failed';
+  }
+
+  /**
+   * Deja el SKU vinculado a la publicación para que el actualizador le
+   * mantenga precio y stock desde la corrida siguiente. Si internal-api
+   * falla, la publicación ya está hecha: se avisa y se sigue.
+   */
+  private async linkForSync(sku: string, mla: string | null): Promise<boolean> {
+    if (!mla) return false;
+
+    try {
+      await this.internalApi.upsertProductInMercadoLibre(sku, mla, {
+        updatePrice: true,
+        updateStock: true,
+      });
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        `[publish] ${mla} (${sku}) quedó publicado pero NO vinculado al actualizador: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return false;
+    }
   }
 
   private firstErrorMessage(creation: PublicationCreation): string | null {
