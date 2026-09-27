@@ -19,6 +19,7 @@ const input: CreateCoresaPublicationInput = {
   sku: 'PC12NW',
   coresaSnapshot: { SKU: 'PC12NW' },
   draft,
+  categoryId: 'MLA1591',
 };
 
 describe('APICoresaPublicationRepository', () => {
@@ -70,6 +71,7 @@ describe('APICoresaPublicationRepository', () => {
         data: {
           status: 'draft',
           draft,
+          categoryId: 'MLA1591',
           errorCode: null,
           errorMessage: null,
         },

@@ -72,9 +72,12 @@ export class APICoresaPublicationRepository {
       const existingId = this.inProgressPublicationId(err);
       if (existingId === null) throw err;
 
+      // La categoría va sí o sí: si no, la fila queda con la del primer
+      // preview y no coincide con la del borrador que se va a publicar.
       return this.update(existingId, {
         status: 'draft',
         draft: input.draft,
+        categoryId: input.categoryId ?? input.draft?.category_id ?? null,
         errorCode: null,
         errorMessage: null,
       });

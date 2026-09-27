@@ -24,6 +24,7 @@ import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
 import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { QueryCoresaPublications } from '../core/interactors/coresa/QueryCoresaPublications';
+import { UpdateCoresaPublicationDraft } from '../core/interactors/coresa/UpdateCoresaPublicationDraft';
 import { SyncCoresaCatalog } from '../core/interactors/coresa/SyncCoresaCatalog';
 import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/SyncCoresaProductsToMercadoLibreApi';
 
@@ -76,6 +77,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     PreviewCoresaPublication,
     PublishCoresaPublication,
     QueryCoresaPublications,
+    UpdateCoresaPublicationDraft,
   ],
 })
 export class AppModule {}
