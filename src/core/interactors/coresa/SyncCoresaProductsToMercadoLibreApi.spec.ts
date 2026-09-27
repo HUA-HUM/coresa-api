@@ -6,6 +6,7 @@ import {
   CoresaProductInMercadoLibre,
   MeliListingUpdate,
   MeliListingUpdateResult,
+  MeliUpdateError,
 } from '../../entities/CoresaMercadoLibre';
 
 describe('SyncCoresaProductsToMercadoLibreApi', () => {
@@ -292,5 +293,46 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     expect(summary.runId).toBeNull();
     expect(summary.updated).toBe(1);
     expect(internalApi.finishProcessRun).not.toHaveBeenCalled();
+  });
+
+  it('registra el motivo de ML y lo que se intentó mandar', async () => {
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([
+          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
+        ]),
+    });
+    const updateListing = jest
+      .fn()
+      .mockRejectedValue(
+        new MeliUpdateError(
+          'MLA1',
+          422,
+          'item.status.invalid',
+          'Validation error',
+          ['Item is not active'],
+        ),
+      );
+
+    const summary = await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    expect(summary.failed).toBe(1);
+    expect(summary.items[0].change).toEqual({
+      sku: 'A',
+      mla: 'MLA1',
+      result: 'failed',
+      priceBefore: 100,
+      priceRequested: 998250,
+      priceApplied: null,
+      stockBefore: 1,
+      stockRequested: 250,
+      stockApplied: null,
+      errorCode: 'item.status.invalid',
+      errorMessage: 'Item is not active',
+    });
   });
 });
