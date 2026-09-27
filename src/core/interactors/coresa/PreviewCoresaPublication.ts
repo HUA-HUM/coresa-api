@@ -26,7 +26,11 @@ import {
   IProductEnrichmentRepositoryToken,
 } from '../../adapters/repositories/IProductEnrichmentRepository';
 import { CoresaPublication } from '../../entities/CoresaPublication';
-import { MeliCategorySuggestion } from '../../entities/MeliCategory';
+import { CoresaProduct } from '../../entities/CoresaProduct';
+import {
+  MeliCategoryAttribute,
+  MeliCategorySuggestion,
+} from '../../entities/MeliCategory';
 import {
   PublicationDraft,
   PublicationValidation,
@@ -49,6 +53,8 @@ export class PreviewCoresaPublicationResult {
   draft: PublicationDraft;
   validation: PublicationValidation;
   missingRequiredAttributes: string[];
+  /** Obligatorios que no estaban en los datos de Coresa y dedujo la IA. */
+  inferredAttributes: string[];
   status: string;
 }
 
@@ -118,7 +124,27 @@ export class PreviewCoresaPublication {
       ),
     });
 
-    const validation = await this.meliPublish.validateItem(draft);
+    let validation = await this.meliPublish.validateItem(draft);
+    let missing = missingRequiredAttributes(
+      draft.attributes,
+      categoryAttributes,
+    );
+
+    // Un obligatorio vacío hace que ML rechace todo, así que se completa y se
+    // revalida una vez. Sin esto el borrador queda trabado esperando que
+    // alguien escriba a mano un dato que la IA puede deducir.
+    const inferredAttributes = await this.completeMissing(
+      product,
+      categoryAttributes,
+      draft,
+      missing,
+    );
+
+    if (inferredAttributes.length > 0) {
+      validation = await this.meliPublish.validateItem(draft);
+      missing = missingRequiredAttributes(draft.attributes, categoryAttributes);
+    }
+
     const isValid = Object.values(validation?.results ?? {}).every(
       (result) => result?.valid,
     );
@@ -144,10 +170,8 @@ export class PreviewCoresaPublication {
       categorySuggestions: suggestions,
       draft,
       validation,
-      missingRequiredAttributes: missingRequiredAttributes(
-        draft.attributes,
-        categoryAttributes,
-      ),
+      missingRequiredAttributes: missing,
+      inferredAttributes,
       status: publication?.status ?? (isValid ? 'ready' : 'draft'),
     };
   }
@@ -179,6 +203,48 @@ export class PreviewCoresaPublication {
       price,
       availableQuantity: Math.floor(toNumber(stored.Disponible)),
     };
+  }
+
+  /**
+   * Completa los obligatorios que faltan con una segunda consulta a OpenAI y
+   * los agrega al borrador. Devuelve los ids deducidos, para que el panel los
+   * muestre marcados: son los únicos valores que no salen de Coresa.
+   */
+  private async completeMissing(
+    product: CoresaProduct,
+    categoryAttributes: MeliCategoryAttribute[],
+    draft: PublicationDraft,
+    missingIds: string[],
+  ): Promise<string[]> {
+    if (missingIds.length === 0) return [];
+
+    const missing = categoryAttributes.filter((attribute) =>
+      missingIds.includes(attribute.id),
+    );
+
+    try {
+      const completed = await this.enrichment.completeMissingAttributes(
+        product,
+        missing,
+        draft.title,
+      );
+      if (completed.length === 0) return [];
+
+      draft.attributes = [...draft.attributes, ...completed];
+      this.logger.log(
+        `[preview] SKU ${draft.sku}: atributos deducidos ${completed
+          .map((attribute) => attribute.id)
+          .join(', ')}`,
+      );
+      return completed.map((attribute) => attribute.id);
+    } catch (err) {
+      this.logger.warn(
+        `[preview] SKU ${draft.sku}: no se pudieron completar ${missingIds.join(', ')}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
   }
 
   private async registerPreview(params: {

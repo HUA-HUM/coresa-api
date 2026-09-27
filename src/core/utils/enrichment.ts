@@ -116,7 +116,9 @@ export function sanitizeAttributes(
           value.name.toLowerCase() === valueName.toLowerCase(),
       );
       if (!match) continue;
-      result.push({ id, value_id: match.id });
+      // El value_id es lo que usa ML; el value_name va igual para que el
+      // panel pueda mostrar "Plástico" y no "2748302".
+      result.push({ id, value_id: match.id, value_name: match.name });
       seen.add(id);
       continue;
     }

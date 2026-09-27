@@ -57,6 +57,7 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
       model: 'PC12NW',
       attributes: [],
     }),
+    completeMissingAttributes: jest.fn().mockResolvedValue([]),
   };
   const publications = {
     create: jest
@@ -153,6 +154,62 @@ describe('PreviewCoresaPublication', () => {
       7,
       expect.objectContaining({ status: 'draft' }),
     );
+  });
+
+  it('completa con la IA los obligatorios que faltan y revalida', async () => {
+    const deps = buildDeps();
+    deps.enrichment.buildContent.mockResolvedValue({
+      title: 'Panel Plafón',
+      description: 'Descripción.',
+      model: '',
+      attributes: [],
+    });
+    deps.enrichment.completeMissingAttributes.mockResolvedValue([
+      { id: 'MODEL', value_name: 'PC12NW' },
+    ]);
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    // Primero falta MODEL; después de completarlo, no falta nada.
+    expect(deps.enrichment.completeMissingAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ SKU: 'PC12NW' }),
+      [expect.objectContaining({ id: 'MODEL' })],
+      'Panel Plafón',
+    );
+    expect(deps.meliPublish.validateItem).toHaveBeenCalledTimes(2);
+    expect(result.inferredAttributes).toEqual(['MODEL']);
+    expect(result.missingRequiredAttributes).toEqual([]);
+    expect(result.draft.attributes).toEqual(
+      expect.arrayContaining([{ id: 'MODEL', value_name: 'PC12NW' }]),
+    );
+  });
+
+  it('no llama a la IA de nuevo si no falta ningún obligatorio', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(deps.enrichment.completeMissingAttributes).not.toHaveBeenCalled();
+    expect(deps.meliPublish.validateItem).toHaveBeenCalledTimes(1);
+    expect(result.inferredAttributes).toEqual([]);
+  });
+
+  it('sigue adelante si la IA no puede completar lo que falta', async () => {
+    const deps = buildDeps();
+    deps.enrichment.buildContent.mockResolvedValue({
+      title: 'Panel Plafón',
+      description: 'Descripción.',
+      model: '',
+      attributes: [],
+    });
+    deps.enrichment.completeMissingAttributes.mockRejectedValue(
+      new Error('openai caído'),
+    );
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(result.inferredAttributes).toEqual([]);
+    expect(result.missingRequiredAttributes).toEqual(['MODEL']);
   });
 
   it('informa los atributos obligatorios que quedaron sin completar', async () => {
