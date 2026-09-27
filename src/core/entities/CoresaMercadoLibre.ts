@@ -36,6 +36,28 @@ export type MeliListingUpdateResult = {
 
 export type SyncChangeResult = 'updated' | 'not_applied' | 'failed';
 
+/**
+ * Error de meli-api con el detalle de ML adentro. Sin esto, en el registro
+ * queda "Request failed with status code 422" y no se puede saber qué pasó.
+ */
+export class MeliUpdateError extends Error {
+  constructor(
+    readonly mla: string,
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly causes: string[] = [],
+  ) {
+    super(message);
+    this.name = 'MeliUpdateError';
+  }
+
+  /** El motivo completo, para guardar en el historial de cambios. */
+  get detail(): string {
+    return this.causes.length > 0 ? this.causes.join(' | ') : this.message;
+  }
+}
+
 /** Una fila del historial de cambios de precio y stock. */
 export type CoresaSyncChange = {
   sku: string;

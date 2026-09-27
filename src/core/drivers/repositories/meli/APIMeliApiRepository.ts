@@ -1,7 +1,8 @@
-import { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   MeliListingUpdate,
   MeliListingUpdateResult,
+  MeliUpdateError,
 } from '../../../entities/CoresaMercadoLibre';
 import { toNumber } from '../../../utils/coresaPriceStock';
 
@@ -119,13 +120,55 @@ export class APIMeliApiRepository {
 
     const itemId = encodeURIComponent(mla);
     const config = this.prepareRequest(`/meli/items/${itemId}`, {}, body);
-    const response = await this.axios.request(config);
+
+    let response: AxiosResponse<unknown>;
+    try {
+      response = await this.axios.request<unknown>(config);
+    } catch (err) {
+      throw this.toUpdateError(mla, err);
+    }
+
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(
-        `[meli-api] updateListing ${mla} -> ${response.status}: ${JSON.stringify(response.data)}`,
-      );
+      throw this.toUpdateError(mla, {
+        response: { status: response.status, data: response.data },
+      });
     }
 
     return this.mapUpdateResult(mla, body, response.data);
+  }
+
+  /**
+   * meli-api devuelve el error de ML normalizado: { status, code, message,
+   * cause[] }. Eso es lo que hay que conservar; el mensaje de axios solo
+   * dice el código HTTP.
+   */
+  private toUpdateError(mla: string, err: unknown): MeliUpdateError {
+    const response = axios.isAxiosError(err)
+      ? err.response
+      : (err as { response?: { status?: number; data?: unknown } })?.response;
+
+    const status = Number(response?.status ?? 0);
+    const body = (response?.data ?? {}) as {
+      code?: string;
+      message?: string;
+      cause?: { message?: string; type?: string }[];
+    };
+
+    const causes = Array.isArray(body.cause)
+      ? body.cause
+          .filter((cause) => cause?.type !== 'warning')
+          .map((cause) => String(cause?.message ?? '').trim())
+          .filter((message) => message !== '')
+      : [];
+
+    const fallback = err instanceof Error ? err.message : String(err);
+
+    return new MeliUpdateError(
+      mla,
+      status,
+      String(body.code ?? (status ? `HTTP_${status}` : 'MELI_UPDATE_ERROR')),
+      String(body.message ?? fallback),
+      causes,
+    );
   }
 }

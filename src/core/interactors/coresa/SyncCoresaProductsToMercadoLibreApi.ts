@@ -11,6 +11,7 @@ import {
   CoresaProductInMercadoLibre,
   CoresaSyncChange,
   MeliListingUpdate,
+  MeliUpdateError,
   SyncChangeResult,
 } from '../../entities/CoresaMercadoLibre';
 import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
@@ -135,6 +136,12 @@ export class SyncCoresaProductsToMercadoLibreApi {
       return { sku, mla, result: 'skipped', reason: 'fila sin SKU o MLA' };
     }
 
+    // Se declaran afuera del try para que la fila de error pueda registrar
+    // qué se intentó mandar: sin eso, no se sabe si era precio o stock.
+    const patch: MeliListingUpdate = {};
+    let priceBefore: number | null = null;
+    let stockBefore: number | null = null;
+
     try {
       const [desired, current] = await Promise.all([
         this.internalApi.getCoresaProductBySku(sku),
@@ -158,9 +165,8 @@ export class SyncCoresaProductsToMercadoLibreApi {
         };
       }
 
-      const priceBefore = Math.round(toNumber(current.price));
-      const stockBefore = Math.floor(toNumber(current.available_quantity));
-      const patch: MeliListingUpdate = {};
+      priceBefore = Math.round(toNumber(current.price));
+      stockBefore = Math.floor(toNumber(current.available_quantity));
 
       if (link.updatePrice) {
         const price = Math.round(toNumber(desired.Precio_Convertido));
@@ -206,20 +212,36 @@ export class SyncCoresaProductsToMercadoLibreApi {
         },
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`[meli] ${mla} (${sku}) falló: ${message}`);
+      const isMeliError = err instanceof MeliUpdateError;
+      const errorCode = isMeliError ? err.code : 'MELI_UPDATE_ERROR';
+      const detail = isMeliError
+        ? err.detail
+        : err instanceof Error
+          ? err.message
+          : String(err);
+
+      this.logger.warn(
+        `[meli] ${mla} (${sku}) falló [${errorCode}]: ${detail}`,
+      );
 
       return {
         sku,
         mla,
         result: 'failed',
-        reason: message,
+        reason: detail,
         change: {
           sku,
           mla,
           result: 'failed',
-          errorCode: 'MELI_UPDATE_ERROR',
-          errorMessage: message,
+          priceBefore: patch.price === undefined ? null : priceBefore,
+          priceRequested: patch.price ?? null,
+          priceApplied: null,
+          stockBefore:
+            patch.available_quantity === undefined ? null : stockBefore,
+          stockRequested: patch.available_quantity ?? null,
+          stockApplied: null,
+          errorCode,
+          errorMessage: detail,
         },
       };
     }

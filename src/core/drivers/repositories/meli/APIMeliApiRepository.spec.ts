@@ -1,4 +1,12 @@
+import { AxiosError } from 'axios';
 import { APIMeliApiRepository } from './APIMeliApiRepository';
+import { MeliUpdateError } from '../../../entities/CoresaMercadoLibre';
+
+function meliError(status: number, data: unknown): AxiosError {
+  const error = new AxiosError(`Request failed with status code ${status}`);
+  error.response = { status, data } as AxiosError['response'];
+  return error;
+}
 
 describe('APIMeliApiRepository', () => {
   const originalEnv = process.env;
@@ -144,5 +152,60 @@ describe('APIMeliApiRepository', () => {
 
     expect(result.changed).toBe(true);
     expect(result.requested).toEqual({ price: 5600 });
+  });
+
+  it('conserva el motivo que devuelve ML cuando rechaza el update', async () => {
+    const request = jest.fn().mockRejectedValue(
+      meliError(422, {
+        status: 422,
+        code: 'item.status.invalid',
+        message: 'Validation error',
+        cause: [
+          { type: 'error', message: 'Item is not active' },
+          { type: 'warning', message: 'esto no interesa' },
+        ],
+      }),
+    );
+    const repo = new APIMeliApiRepository({ request } as never);
+
+    await expect(repo.updateListing('MLA1', { price: 100 })).rejects.toThrow(
+      MeliUpdateError,
+    );
+
+    try {
+      await repo.updateListing('MLA1', { price: 100 });
+    } catch (err) {
+      const error = err as MeliUpdateError;
+      expect(error.status).toBe(422);
+      expect(error.code).toBe('item.status.invalid');
+      // El warning no entra: el motivo es el error.
+      expect(error.detail).toBe('Item is not active');
+    }
+  });
+
+  it('usa el código HTTP cuando meli-api no manda un code', async () => {
+    const request = jest.fn().mockRejectedValue(meliError(502, {}));
+    const repo = new APIMeliApiRepository({ request } as never);
+
+    try {
+      await repo.updateListing('MLA1', { price: 100 });
+    } catch (err) {
+      const error = err as MeliUpdateError;
+      expect(error.code).toBe('HTTP_502');
+      expect(error.detail).toContain('502');
+    }
+  });
+
+  it('tolera un error de red, sin respuesta', async () => {
+    const request = jest.fn().mockRejectedValue(new Error('ECONNRESET'));
+    const repo = new APIMeliApiRepository({ request } as never);
+
+    try {
+      await repo.updateListing('MLA1', { price: 100 });
+    } catch (err) {
+      const error = err as MeliUpdateError;
+      expect(error.code).toBe('MELI_UPDATE_ERROR');
+      expect(error.detail).toBe('ECONNRESET');
+    }
   });
 });
