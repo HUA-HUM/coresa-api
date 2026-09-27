@@ -102,7 +102,9 @@ describe('enrichment', () => {
         categoryAttributes,
       );
 
-      expect(result).toEqual([{ id: 'COLOR', value_id: '52055' }]);
+      expect(result).toEqual([
+        { id: 'COLOR', value_id: '52055', value_name: 'Blanco' },
+      ]);
     });
 
     it('descarta un valor que no está en la lista permitida', () => {
@@ -124,7 +126,9 @@ describe('enrichment', () => {
         categoryAttributes,
       );
 
-      expect(result).toEqual([{ id: 'COLOR', value_id: '52056' }]);
+      expect(result).toEqual([
+        { id: 'COLOR', value_id: '52056', value_name: 'Negro' },
+      ]);
     });
   });
 

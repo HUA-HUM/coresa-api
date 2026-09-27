@@ -14,6 +14,15 @@ export interface IProductEnrichmentRepository {
     product: CoresaProduct,
     categoryAttributes: MeliCategoryAttribute[],
   ): Promise<EnrichedProductContent>;
+  /**
+   * Segunda pasada: completa los atributos obligatorios que la primera dejó
+   * afuera, eligiendo el valor más probable en vez de omitirlos.
+   */
+  completeMissingAttributes(
+    product: CoresaProduct,
+    missing: MeliCategoryAttribute[],
+    title: string,
+  ): Promise<DraftAttribute[]>;
 }
 
 export const IProductEnrichmentRepositoryToken = Symbol(

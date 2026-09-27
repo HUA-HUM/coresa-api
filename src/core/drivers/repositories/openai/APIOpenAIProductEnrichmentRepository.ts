@@ -113,6 +113,57 @@ export class APIOpenAIProductEnrichmentRepository {
     }
   }
 
+  /**
+   * Prompt distinto al de la primera pasada: acá NO se omite. Se elige el
+   * valor más probable, porque un obligatorio vacío hace que ML rechace la
+   * publicación entera. El que llama marca estos atributos como deducidos.
+   */
+  private buildCompletionPrompt(
+    product: CoresaProduct,
+    missing: MeliCategoryAttribute[],
+    title: string,
+  ): string {
+    return [
+      `MercadoLibre rechaza esta publicación porque faltan atributos obligatorios.`,
+      '',
+      `Título de la publicación: ${title}`,
+      '',
+      'Producto (datos del proveedor):',
+      JSON.stringify(productFactsForPrompt(product), null, 2),
+      '',
+      'Atributos que faltan:',
+      JSON.stringify(describeAttributesForPrompt(missing), null, 2),
+      '',
+      'Reglas:',
+      '- Completá TODOS los atributos de la lista. No omitas ninguno.',
+      '- Si el atributo tiene "valores_permitidos", el value_name tiene que ser exactamente uno de esos.',
+      '- Usá lo que sepas del tipo de producto y de la marca para elegir el valor más probable, aunque no esté escrito en los datos del proveedor.',
+      '- Ante la duda entre varios valores permitidos, elegí el más común para ese tipo de producto.',
+      '',
+      'Respondé con este JSON:',
+      '{"attributes": [{"id": "MATERIAL", "value_name": "..."}]}',
+    ].join('\n');
+  }
+
+  async completeMissingAttributes(
+    product: CoresaProduct,
+    missing: MeliCategoryAttribute[],
+    title: string,
+  ): Promise<DraftAttribute[]> {
+    if (missing.length === 0) return [];
+
+    const config = this.prepareRequest(
+      this.buildCompletionPrompt(product, missing, title),
+    );
+    const response = await this.axios.request(config);
+    const parsed = this.parseContent(response.data);
+    const proposed = Array.isArray(parsed.attributes)
+      ? (parsed.attributes as DraftAttribute[])
+      : [];
+
+    return sanitizeAttributes(proposed, missing);
+  }
+
   async buildContent(
     product: CoresaProduct,
     categoryAttributes: MeliCategoryAttribute[],
