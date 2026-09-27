@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -29,6 +30,10 @@ import {
 } from '../../../core/interactors/coresa/PublishCoresaPublication';
 import { PublicationDraft } from '../../../core/entities/PublicationDraft';
 import { QueryCoresaPublications } from '../../../core/interactors/coresa/QueryCoresaPublications';
+import {
+  UpdateCoresaPublicationDraft,
+  UpdateDraftResult,
+} from '../../../core/interactors/coresa/UpdateCoresaPublicationDraft';
 import {
   CoresaPublication,
   CoresaPublicationList,
@@ -57,6 +62,7 @@ export class PublicationsCoresaController {
     private readonly previewPublication: PreviewCoresaPublication,
     private readonly publishPublication: PublishCoresaPublication,
     private readonly queryPublications: QueryCoresaPublications,
+    private readonly updateDraft: UpdateCoresaPublicationDraft,
   ) {}
 
   @Get()
@@ -153,6 +159,42 @@ export class PublicationsCoresaController {
       sku: body?.sku,
       requestedBy: body?.requestedBy,
       categoryId: body?.categoryId,
+    });
+  }
+
+  @Put(':id/draft')
+  @ApiOperation({
+    summary:
+      'Guarda las correcciones del usuario y las revalida en ML, sin publicar',
+    description:
+      'No vuelve a llamar a OpenAI: rearmar el borrador pisaría lo que el usuario escribió. Deja la publicación en ready o draft según lo que diga ML. attributes y pictures se reemplazan enteros.',
+  })
+  @ApiParam({ name: 'id', example: 4 })
+  @ApiBody({
+    schema: {
+      example: {
+        draft: {
+          title: 'Ángulo De Fijación Lateral Weidmuller Aeb 35 Sc/1',
+          price: 2900,
+          attributes: [
+            { id: 'BRAND', value_name: 'Weidmuller' },
+            { id: 'MATERIAL', value_name: 'Sintético' },
+          ],
+        },
+        requestedBy: 'arturo@solediluminacion.com',
+      },
+    },
+  })
+  @ApiOkResponse({ description: 'Borrador guardado y revalidado' })
+  async saveDraft(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: PublishPublicationBody,
+  ): Promise<UpdateDraftResult> {
+    this.logger.log(`[draft] editando la publicación ${id}`);
+    return this.updateDraft.execute({
+      publicationId: id,
+      draft: body?.draft ?? {},
+      requestedBy: body?.requestedBy,
     });
   }
 

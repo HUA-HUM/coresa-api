@@ -22,6 +22,7 @@ export class CreateCoresaPublicationInput {
 
 export class UpdateCoresaPublicationInput {
   status?: CoresaPublicationStatus;
+  categoryId?: string | null;
   draft?: PublicationDraft;
   validation?: PublicationValidation;
   classicItemId?: string | null;
