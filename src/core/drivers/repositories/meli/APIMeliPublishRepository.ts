@@ -88,12 +88,25 @@ export class APIMeliPublishRepository {
     return Array.isArray(payload?.attributes) ? payload.attributes : [];
   }
 
+  /**
+   * La variante es un dato nuestro, no de ML: viaja en el borrador para poder
+   * registrarla después, pero no va en el payload. meli-api valida el body y
+   * un campo de más lo rechaza.
+   */
+  private payloadOf(
+    draft: PublicationDraft,
+  ): Omit<PublicationDraft, 'variant'> {
+    const payload = { ...draft };
+    delete payload.variant;
+    return payload;
+  }
+
   async validateItem(draft: PublicationDraft): Promise<PublicationValidation> {
     const config = this.prepareRequest(
       'POST',
       '/meli/items/validate',
       {},
-      draft,
+      this.payloadOf(draft),
     );
     const response = await this.axios.request(config);
     return response.data as PublicationValidation;
@@ -105,7 +118,12 @@ export class APIMeliPublishRepository {
    * haber creado el ítem igual.
    */
   async createItem(draft: PublicationDraft): Promise<PublicationCreation> {
-    const config = this.prepareRequest('POST', '/meli/items', {}, draft);
+    const config = this.prepareRequest(
+      'POST',
+      '/meli/items',
+      {},
+      this.payloadOf(draft),
+    );
     const response = await this.axios.request(config);
     return response.data as PublicationCreation;
   }

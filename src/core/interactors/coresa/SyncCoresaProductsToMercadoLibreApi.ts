@@ -14,10 +14,24 @@ import {
   MeliUpdateError,
   SyncChangeResult,
 } from '../../entities/CoresaMercadoLibre';
+import {
+  baseUnitsOf,
+  PublicationVariant,
+  variantPrice,
+  variantStock,
+} from '../../entities/PublicationVariant';
 import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
 import { toNumber } from '../../utils/coresaPriceStock';
 
 export const PROCESS_NAME = 'coresa_meli_sync';
+
+/**
+ * Tope de cuánto puede moverse un precio en una corrida. Un salto más grande
+ * que esto casi siempre es un dato mal compuesto, no un cambio de lista: en
+ * septiembre de 2026 una publicación de una unidad recibió el precio de la
+ * caja de 100 y se fue de $9.192 a $919.209. Se frena y se avisa.
+ */
+const DEFAULT_MAX_PRICE_JUMP = 2;
 
 export type SyncItemResult = SyncChangeResult | 'unchanged' | 'skipped';
 
@@ -56,6 +70,20 @@ export class SyncCoresaProductsToMercadoLibreApi {
 
   private get bySkuConcurrency(): number {
     return Number(process.env.INTERNAL_API_BY_SKU_CONCURRENCY ?? 10);
+  }
+
+  private get maxPriceJump(): number {
+    const jump = Number(
+      process.env.SYNC_MAX_PRICE_JUMP ?? DEFAULT_MAX_PRICE_JUMP,
+    );
+    return Number.isFinite(jump) && jump > 1 ? jump : DEFAULT_MAX_PRICE_JUMP;
+  }
+
+  /** Un precio nuevo que multiplica o divide por más del tope no se manda. */
+  private isPriceJumpTooBig(before: number, next: number): boolean {
+    if (!(before > 0) || !(next > 0)) return false;
+    const jump = this.maxPriceJump;
+    return next > before * jump || next * jump < before;
   }
 
   async execute(
@@ -136,6 +164,27 @@ export class SyncCoresaProductsToMercadoLibreApi {
       return { sku, mla, result: 'skipped', reason: 'fila sin SKU o MLA' };
     }
 
+    // Sin la variante no se sabe si la publicación vende de a 1 o de a 100, y
+    // mandarle el precio del empaque a una publicación de una unidad es
+    // justamente el error que este dato viene a evitar. Las filas heredadas
+    // caen acá y se quedan quietas hasta que alguien las complete.
+    if (!(link.unitsPerListing !== null && link.unitsPerListing >= 1)) {
+      return {
+        sku,
+        mla,
+        result: 'skipped',
+        reason:
+          'la fila no tiene cargada la variante (units_per_listing vacío)',
+      };
+    }
+
+    const variant: PublicationVariant = {
+      listingType: link.listingType ?? 'gold_special',
+      unitsPerListing: link.unitsPerListing,
+      modalidad: link.modalidad ?? 'contado',
+      priceFactor: link.priceFactor,
+    };
+
     // Se declaran afuera del try para que la fila de error pueda registrar
     // qué se intentó mandar: sin eso, no se sabe si era precio o stock.
     const patch: MeliListingUpdate = {};
@@ -168,17 +217,37 @@ export class SyncCoresaProductsToMercadoLibreApi {
       priceBefore = Math.round(toNumber(current.price));
       stockBefore = Math.floor(toNumber(current.available_quantity));
 
+      let blocked: string | null = null;
+
       if (link.updatePrice) {
-        const price = Math.round(toNumber(desired.Precio_Convertido));
-        if (price > 0 && price !== priceBefore) patch.price = price;
+        // El precio de esta publicación se compone a partir del precio base
+        // del SKU: precio unitario x unidades de la publicación x recargo.
+        const price = variantPrice(
+          Math.round(toNumber(desired.Precio_Convertido)),
+          baseUnitsOf(desired),
+          variant,
+        );
+        if (price > 0 && price !== priceBefore) {
+          if (this.isPriceJumpTooBig(priceBefore, price)) {
+            blocked = `precio frenado: ${priceBefore} -> ${price} supera el tope de x${this.maxPriceJump}`;
+            this.logger.warn(`[meli] ${mla} (${sku}): ${blocked}`);
+          } else {
+            patch.price = price;
+          }
+        }
       }
       if (link.updateStock) {
-        const stock = Math.floor(toNumber(desired.Disponible));
+        const stock = variantStock(
+          toNumber(desired.Disponible),
+          variant.unitsPerListing,
+        );
         if (stock !== stockBefore) patch.available_quantity = stock;
       }
 
       if (patch.price === undefined && patch.available_quantity === undefined) {
-        return { sku, mla, result: 'unchanged' };
+        return blocked
+          ? { sku, mla, result: 'skipped', reason: blocked }
+          : { sku, mla, result: 'unchanged' };
       }
 
       const applied = await this.mercadoLibreRepo.updateListing(mla, patch);
@@ -196,6 +265,7 @@ export class SyncCoresaProductsToMercadoLibreApi {
         sku,
         mla,
         result,
+        reason: blocked ?? undefined,
         change: {
           sku,
           mla,

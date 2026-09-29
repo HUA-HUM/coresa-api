@@ -115,6 +115,9 @@ describe('coresaPriceStock', () => {
         Impuestos: 'IVA_21',
         Precio_Lista_1: 10,
         Precio_Convertido: 998250,
+        // El precio se compone sobre el empaque, así que queda anotado a
+        // cuántas unidades corresponde: sin esto no hay precio unitario.
+        base_units: 100,
         Moneda: 'USD',
         CantIntermedia: 100,
         Disponible: 250,

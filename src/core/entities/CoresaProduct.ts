@@ -14,6 +14,11 @@ export class CoresaProduct {
   Venta_Unitaria?: boolean;
   Precio_Lista_1?: number | string;
   Precio_Convertido?: number;
+  /**
+   * A cuántas unidades corresponde Precio_Convertido. Coresa cotiza por su
+   * empaque, así que sin este dato no se puede sacar el precio unitario.
+   */
+  base_units?: number | string;
   Impuestos?: string;
   Moneda?: string;
   CantMaster?: number | string;

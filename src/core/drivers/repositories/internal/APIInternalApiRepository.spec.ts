@@ -78,12 +78,19 @@ describe('APIInternalApiRepository', () => {
         params: { limit: 200, offset: 0 },
       }),
     );
+    // Una fila sin variante queda con los campos en null y origen heredado:
+    // es lo que hace que el actualizador no la toque.
     expect(links).toEqual([
       {
         sku: 'A',
         mla: 'MLA1',
         updateStock: false,
         updatePrice: true,
+        listingType: null,
+        unitsPerListing: null,
+        modalidad: null,
+        priceFactor: 1,
+        origen: 'heredado',
         createdAt: '2026-01-01',
       },
     ]);

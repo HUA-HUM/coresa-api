@@ -44,6 +44,14 @@ class PreviewPublicationBody {
   sku: string;
   requestedBy?: string;
   categoryId?: string;
+  /** gold_special (clásica) o gold_pro (premium). Por defecto, clásica. */
+  listingType?: string;
+  /** Cuántas unidades vende esta publicación. Por defecto, 1. */
+  unitsPerListing?: number;
+  /** contado, cuota_simple, x6, x12. Por defecto, contado. */
+  modalidad?: string;
+  /** Recargo de la modalidad: 1 sin recargo, 1.15 un 15% arriba. */
+  priceFactor?: number;
 }
 
 class PublishPublicationBody {
@@ -141,12 +149,18 @@ export class PublicationsCoresaController {
   @ApiOperation({
     summary:
       'Arma el borrador de publicación de un SKU: categoría, atributos, contenido con OpenAI, precio y validación en ML',
+    description:
+      'La variante (tipo, unidades y modalidad) define el precio y el contenido: un pack de 6 se cotiza por 6 y la IA escribe el título diciéndolo. Si el SKU ya está publicado con esa misma variante devuelve 409 con el MLA que ya existe.',
   })
   @ApiBody({
     schema: {
       example: {
         sku: 'AEB 35 SC/1',
         requestedBy: 'arturo@solediluminacion.com',
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
       },
     },
   })
@@ -159,6 +173,10 @@ export class PublicationsCoresaController {
       sku: body?.sku,
       requestedBy: body?.requestedBy,
       categoryId: body?.categoryId,
+      listingType: body?.listingType,
+      unitsPerListing: body?.unitsPerListing,
+      modalidad: body?.modalidad,
+      priceFactor: body?.priceFactor,
     });
   }
 

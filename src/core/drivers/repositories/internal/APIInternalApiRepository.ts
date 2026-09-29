@@ -2,10 +2,12 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { CoresaProduct } from '../../../entities/CoresaProduct';
 import {
+  CoresaListingVariantInput,
   CoresaProductInMercadoLibre,
   CoresaSyncChange,
   MercadoLibreProductSnapshot,
   mapCoresaProduct,
+  mapCoresaProductInMercadoLibre,
   mapCoresaProductsInMercadoLibre,
   mapMercadoLibreProductSnapshot,
   unwrapList,
@@ -308,20 +310,48 @@ export class APIInternalApiRepository {
    * Deja el SKU vinculado a la publicación para que el actualizador le
    * mantenga precio y stock. Es un upsert por (sku, mla).
    */
+  async listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]> {
+    const encoded = encodeURIComponent(sku);
+    const payload = await this.getOrNull(
+      `/internal/coresa/products-in-mercadolibre/by-sku/${encoded}`,
+      `variantes de ${sku}`,
+    );
+    if (payload === null) return [];
+
+    return unwrapList(payload)
+      .map((item) => mapCoresaProductInMercadoLibre(item))
+      .filter((item): item is CoresaProductInMercadoLibre => item !== null);
+  }
+
+  /**
+   * Un campo que no se manda NO se pisa del lado de internal-api, así que
+   * acá solo viajan las claves presentes: apagar el sync de una fila no tiene
+   * que borrarle la variante.
+   */
   async upsertProductInMercadoLibre(
     sku: string,
     mla: string,
-    flags: { updatePrice?: boolean; updateStock?: boolean } = {},
+    fields: CoresaListingVariantInput = {},
   ): Promise<void> {
+    const body: Record<string, unknown> = { sku, mla };
+    if (fields.updatePrice !== undefined) body.updatePrice = fields.updatePrice;
+    if (fields.updateStock !== undefined) body.updateStock = fields.updateStock;
+    if (fields.listingType !== undefined) {
+      body.listing_type = fields.listingType;
+    }
+    if (fields.unitsPerListing !== undefined) {
+      body.units_per_listing = fields.unitsPerListing;
+    }
+    if (fields.modalidad !== undefined) body.modalidad = fields.modalidad;
+    if (fields.priceFactor !== undefined) {
+      body.price_factor = fields.priceFactor;
+    }
+    if (fields.origen !== undefined) body.origen = fields.origen;
+
     const config = this.prepareRequest(
       '/internal/coresa/products-in-mercadolibre',
       {},
-      {
-        sku,
-        mla,
-        updatePrice: flags.updatePrice ?? true,
-        updateStock: flags.updateStock ?? true,
-      },
+      body,
     );
     await this.request(config);
   }

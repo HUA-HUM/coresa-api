@@ -239,4 +239,44 @@ describe('atributos de paquete e impuestos', () => {
     expect(porId.VALUE_ADDED_TAX).toBe('21 %');
     expect(porId.IMPORT_DUTY).toBe('0 %');
   });
+  it('publica solo el tipo de la variante y lo deja anotado en el borrador', () => {
+    const draft = buildPublicationDraft({
+      product,
+      categoryId: 'MLA1591',
+      content,
+      price: 1777,
+      availableQuantity: 1050,
+      allowedAttributeIds: new Set(['BRAND']),
+      variant: {
+        listingType: 'gold_pro',
+        unitsPerListing: 6,
+        modalidad: 'x12',
+        priceFactor: 1.15,
+      },
+    });
+
+    expect(draft.listing_types).toEqual(['gold_pro']);
+    // La variante viaja en el borrador para poder registrarla cuando ML
+    // devuelva el MLA; se saca del payload antes de mandarlo a meli-api.
+    expect(draft.variant?.unitsPerListing).toBe(6);
+  });
+
+  it('no manda GTIN en un pack: el código de la unidad no lo identifica', () => {
+    const draft = buildPublicationDraft({
+      product,
+      categoryId: 'MLA1591',
+      content,
+      price: 1777,
+      availableQuantity: 175,
+      allowedAttributeIds: new Set(['BRAND', 'MODEL', 'GTIN', 'COLOR']),
+      variant: {
+        listingType: 'gold_special',
+        unitsPerListing: 6,
+        modalidad: 'contado',
+        priceFactor: 1,
+      },
+    });
+
+    expect(draft.attributes.map((a) => a.id)).not.toContain('GTIN');
+  });
 });

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -35,6 +36,20 @@ import {
   PublicationDraft,
   PublicationValidation,
 } from '../../entities/PublicationDraft';
+import { CoresaProductInMercadoLibre } from '../../entities/CoresaMercadoLibre';
+import {
+  baseUnitsOf,
+  describeVariant,
+  isMeliListingType,
+  MAX_PRICE_FACTOR,
+  MELI_LISTING_TYPES,
+  MIN_PRICE_FACTOR,
+  normalizeModalidad,
+  PublicationVariant,
+  sameVariant,
+  variantPrice,
+  variantStock,
+} from '../../entities/PublicationVariant';
 import { toNumber } from '../../utils/coresaPriceStock';
 import { missingRequiredAttributes } from '../../utils/enrichment';
 import { buildPublicationDraft } from '../../utils/publicationDraft';
@@ -43,6 +58,11 @@ export class PreviewCoresaPublicationInput {
   sku: string;
   requestedBy?: string;
   categoryId?: string;
+  /** Con qué forma se publica. Sin nada: clásica, una unidad, contado. */
+  listingType?: string;
+  unitsPerListing?: number;
+  modalidad?: string;
+  priceFactor?: number;
 }
 
 export class PreviewCoresaPublicationResult {
@@ -56,6 +76,10 @@ export class PreviewCoresaPublicationResult {
   /** Obligatorios que no estaban en los datos de Coresa y dedujo la IA. */
   inferredAttributes: string[];
   status: string;
+  /** La variante con la que se armó el borrador. */
+  variant: PublicationVariant;
+  /** Las que ese SKU ya tiene publicadas, para que el panel las muestre. */
+  publishedVariants: CoresaProductInMercadoLibre[];
 }
 
 @Injectable()
@@ -89,10 +113,17 @@ export class PreviewCoresaPublication {
     const sku = String(input.sku ?? '').trim();
     if (!sku) throw new BadRequestException('sku es obligatorio');
 
+    const variant = this.resolveVariant(input);
+
     const product = await this.coresaRepo.getProductBySku(sku);
     if (!product) {
       throw new NotFoundException(`SKU ${sku} no existe en el catálogo Coresa`);
     }
+
+    // Antes de gastar una llamada a OpenAI: si esta misma variante ya está
+    // publicada, publicarla de nuevo duplica la oferta en ML.
+    const publishedVariants = await this.publishedVariantsOf(sku);
+    this.rejectDuplicate(sku, variant, publishedVariants);
 
     const baseTitle = String(product.Descripcion ?? sku).trim();
     const suggestions = input.categoryId
@@ -108,20 +139,21 @@ export class PreviewCoresaPublication {
     const categoryAttributes =
       await this.meliPublish.getCategoryAttributes(categoryId);
 
-    const [content, priceAndStock] = await Promise.all([
-      this.enrichment.buildContent(product, categoryAttributes),
-      this.priceAndStockFor(sku),
+    const [content, base] = await Promise.all([
+      this.enrichment.buildContent(product, categoryAttributes, variant),
+      this.baseFor(sku),
     ]);
 
     const draft = buildPublicationDraft({
       product,
       categoryId,
       content,
-      price: priceAndStock.price,
-      availableQuantity: priceAndStock.availableQuantity,
+      price: variantPrice(base.basePrice, base.baseUnits, variant),
+      availableQuantity: variantStock(base.available, variant.unitsPerListing),
       allowedAttributeIds: new Set(
         categoryAttributes.map((attribute) => attribute.id),
       ),
+      variant,
     });
 
     let validation = await this.meliPublish.validateItem(draft);
@@ -160,7 +192,8 @@ export class PreviewCoresaPublication {
     });
 
     this.logger.log(
-      `[preview] SKU ${sku} categoría ${categoryId} precio ${draft.price} stock ${draft.available_quantity} válido=${isValid}`,
+      `[preview] SKU ${sku} (${describeVariant(variant)}) categoría ${categoryId} ` +
+        `precio ${draft.price} stock ${draft.available_quantity} válido=${isValid}`,
     );
 
     return {
@@ -173,18 +206,112 @@ export class PreviewCoresaPublication {
       missingRequiredAttributes: missing,
       inferredAttributes,
       status: publication?.status ?? (isValid ? 'ready' : 'draft'),
+      variant,
+      publishedVariants,
     };
   }
 
   /**
-   * Precio y stock salen de coresa_products, que es lo que el sync de
-   * catálogo deja calculado y lo que después el actualizador mantiene. Si el
-   * SKU no está ahí, no se publica: publicarlo con otro precio dejaría la
-   * publicación desincronizada desde el primer día.
+   * Los cuatro datos de la variante, con los defaults de una publicación
+   * común. Se validan acá y no más adelante porque de estos números sale el
+   * precio: un 100 donde va un 1 multiplica el precio por 100.
    */
-  private async priceAndStockFor(
+  private resolveVariant(
+    input: PreviewCoresaPublicationInput,
+  ): PublicationVariant {
+    const listingType = String(input.listingType ?? 'gold_special').trim();
+    if (!isMeliListingType(listingType)) {
+      throw new BadRequestException(
+        `listingType tiene que ser uno de ${MELI_LISTING_TYPES.join(', ')}`,
+      );
+    }
+
+    const unitsPerListing =
+      input.unitsPerListing === undefined ? 1 : Number(input.unitsPerListing);
+    if (!Number.isInteger(unitsPerListing) || unitsPerListing < 1) {
+      throw new BadRequestException(
+        'unitsPerListing tiene que ser un entero mayor o igual a 1',
+      );
+    }
+
+    const priceFactor =
+      input.priceFactor === undefined ? 1 : Number(input.priceFactor);
+    if (
+      !Number.isFinite(priceFactor) ||
+      priceFactor < MIN_PRICE_FACTOR ||
+      priceFactor > MAX_PRICE_FACTOR
+    ) {
+      throw new BadRequestException(
+        `priceFactor tiene que estar entre ${MIN_PRICE_FACTOR} y ${MAX_PRICE_FACTOR}`,
+      );
+    }
+
+    return {
+      listingType,
+      unitsPerListing,
+      modalidad: normalizeModalidad(input.modalidad),
+      priceFactor,
+    };
+  }
+
+  /**
+   * Si internal-api no contesta no se frena el preview: el borrador se puede
+   * armar igual y el aviso de duplicado es una ayuda, no una condición.
+   */
+  private async publishedVariantsOf(
     sku: string,
-  ): Promise<{ price: number; availableQuantity: number }> {
+  ): Promise<CoresaProductInMercadoLibre[]> {
+    if (!this.registryEnabled) return [];
+
+    try {
+      return await this.internalApi.listVariantsBySku(sku);
+    } catch (err) {
+      this.logger.warn(
+        `[preview] no se pudieron leer las variantes de ${sku}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
+  }
+
+  private rejectDuplicate(
+    sku: string,
+    variant: PublicationVariant,
+    published: CoresaProductInMercadoLibre[],
+  ): void {
+    const existing = published.find(
+      (row) =>
+        row.listingType !== null &&
+        row.unitsPerListing !== null &&
+        sameVariant(
+          {
+            listingType: row.listingType,
+            unitsPerListing: row.unitsPerListing,
+            modalidad: row.modalidad ?? '',
+          },
+          variant,
+        ),
+    );
+    if (!existing) return;
+
+    throw new ConflictException(
+      `El SKU ${sku} ya está publicado como ${describeVariant(variant)} en ${existing.mla}`,
+    );
+  }
+
+  /**
+   * El precio base sale de coresa_products, que es lo que el sync de catálogo
+   * deja calculado y lo que después el actualizador mantiene. Si el SKU no
+   * está ahí, no se publica: publicarlo con otro precio dejaría la publicación
+   * desincronizada desde el primer día.
+   *
+   * base_units dice a cuántas unidades corresponde ese precio, porque Coresa
+   * cotiza por su empaque. Es el dato con el que se saca el precio unitario.
+   */
+  private async baseFor(
+    sku: string,
+  ): Promise<{ basePrice: number; baseUnits: number; available: number }> {
     const stored = await this.internalApi.getCoresaProductBySku(sku);
     if (!stored) {
       throw new BadRequestException(
@@ -192,16 +319,17 @@ export class PreviewCoresaPublication {
       );
     }
 
-    const price = Math.round(toNumber(stored.Precio_Convertido));
-    if (!(price > 0)) {
+    const basePrice = Math.round(toNumber(stored.Precio_Convertido));
+    if (!(basePrice > 0)) {
       throw new BadRequestException(
         `El SKU ${sku} está en coresa_products sin precio calculado. Suele ser una marca sin fórmula de precio asignada.`,
       );
     }
 
     return {
-      price,
-      availableQuantity: Math.floor(toNumber(stored.Disponible)),
+      basePrice,
+      baseUnits: baseUnitsOf(stored),
+      available: Math.floor(toNumber(stored.Disponible)),
     };
   }
 
