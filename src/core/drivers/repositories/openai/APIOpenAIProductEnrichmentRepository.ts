@@ -4,6 +4,10 @@ import { CoresaProduct } from '../../../entities/CoresaProduct';
 import { MeliCategoryAttribute } from '../../../entities/MeliCategory';
 import { DraftAttribute } from '../../../entities/PublicationDraft';
 import {
+  DEFAULT_VARIANT,
+  PublicationVariant,
+} from '../../../entities/PublicationVariant';
+import {
   asText,
   attributesForPrompt,
   describeAttributesForPrompt,
@@ -45,9 +49,26 @@ export class APIOpenAIProductEnrichmentRepository {
     return Number(process.env.OPENAI_TIMEOUT_MS ?? 60000);
   }
 
+  /**
+   * Reglas extra cuando la publicación vende más de una unidad. Publicar un
+   * pack con el título de la unidad suelta es una infracción en ML, así que
+   * la cantidad tiene que estar en el título y en la descripción.
+   */
+  private packRules(variant: PublicationVariant): string[] {
+    if (variant.unitsPerListing <= 1) return [];
+    const units = variant.unitsPerListing;
+    return [
+      `- ESTA PUBLICACIÓN VENDE UN PACK DE ${units} UNIDADES. El comprador recibe ${units} unidades por compra.`,
+      `- El título tiene que decirlo, con el formato "Pack X ${units}" al final. Entrá en el límite de caracteres contando ese texto: si no entra, acortá la descripción del producto, nunca el "Pack X ${units}".`,
+      `- La descripción tiene que aclarar en el primer párrafo que son ${units} unidades.`,
+      '- Las características técnicas siguen siendo las de UNA unidad: no multipliques medidas, potencias ni pesos.',
+    ];
+  }
+
   private buildUserPrompt(
     product: CoresaProduct,
     attributes: MeliCategoryAttribute[],
+    variant: PublicationVariant,
   ): string {
     return [
       'Armá el contenido de una publicación de MercadoLibre para este producto mayorista.',
@@ -63,6 +84,7 @@ export class APIOpenAIProductEnrichmentRepository {
       '- "description": texto plano, sin HTML, de 3 a 6 párrafos cortos, con las características técnicas que aparezcan en los datos del producto.',
       '- "model": el modelo o código del fabricante si aparece en los datos; si no, string vacío.',
       '- "attributes": completá los obligatorios que puedas deducir de los datos. Cuando el atributo tenga "valores_permitidos", el value_name debe ser exactamente uno de esos valores. Si no podés deducir un atributo con los datos disponibles, no lo incluyas.',
+      ...this.packRules(variant),
       '',
       'Respondé con este JSON:',
       '{"title": "...", "description": "...", "model": "...", "attributes": [{"id": "BRAND", "value_name": "..."}]}',
@@ -167,10 +189,11 @@ export class APIOpenAIProductEnrichmentRepository {
   async buildContent(
     product: CoresaProduct,
     categoryAttributes: MeliCategoryAttribute[],
+    variant: PublicationVariant = DEFAULT_VARIANT,
   ): Promise<EnrichedProductContent> {
     const promptAttributes = attributesForPrompt(categoryAttributes);
     const config = this.prepareRequest(
-      this.buildUserPrompt(product, promptAttributes),
+      this.buildUserPrompt(product, promptAttributes, variant),
     );
     const response = await this.axios.request(config);
     const parsed = this.parseContent(response.data);

@@ -1,5 +1,6 @@
 import { CoresaProduct } from '../../entities/CoresaProduct';
 import {
+  CoresaListingVariantInput,
   CoresaProductInMercadoLibre,
   CoresaSyncChange,
   MercadoLibreProductSnapshot,
@@ -22,10 +23,12 @@ export interface IInternalApiRepository {
     summary: unknown,
     errorMessage?: string | null,
   ): Promise<void>;
+  /** Las variantes ya publicadas de un SKU, para no publicar dos veces la misma. */
+  listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]>;
   upsertProductInMercadoLibre(
     sku: string,
     mla: string,
-    flags?: { updatePrice?: boolean; updateStock?: boolean },
+    fields?: CoresaListingVariantInput,
   ): Promise<void>;
   recordSyncChanges(
     runId: number | null,

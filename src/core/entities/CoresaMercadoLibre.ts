@@ -1,12 +1,37 @@
 import { CoresaProduct } from './CoresaProduct';
 import { scalarToString, toNumber } from '../utils/coresaPriceStock';
+import { isMeliListingType, MeliListingType } from './PublicationVariant';
+
+/**
+ * publicador  la creó coresa-api y los datos de la variante son ciertos
+ * manual      la cargó una persona y la confirmó
+ * heredado    fila vieja, con la variante desconocida: no se sincroniza
+ */
+export type CoresaListingOrigen = 'publicador' | 'manual' | 'heredado';
 
 export type CoresaProductInMercadoLibre = {
   sku: string;
   mla: string;
   updateStock: boolean;
   updatePrice: boolean;
+  /** Los tres nulos juntos significan que no se sabe cómo se publicó. */
+  listingType: MeliListingType | null;
+  unitsPerListing: number | null;
+  modalidad: string | null;
+  priceFactor: number;
+  origen: CoresaListingOrigen;
   createdAt?: string;
+};
+
+/** Lo que se manda a internal-api al registrar o corregir una fila. */
+export type CoresaListingVariantInput = {
+  updatePrice?: boolean;
+  updateStock?: boolean;
+  listingType?: MeliListingType;
+  unitsPerListing?: number;
+  modalidad?: string | null;
+  priceFactor?: number;
+  origen?: CoresaListingOrigen;
 };
 
 export type MercadoLibreProductSnapshot = {
@@ -100,6 +125,10 @@ export function unwrapList(payload: unknown): unknown[] {
   );
 }
 
+function isCoresaListingOrigen(value: string): value is CoresaListingOrigen {
+  return value === 'publicador' || value === 'manual' || value === 'heredado';
+}
+
 function readBool(value: unknown, fallback: boolean): boolean {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
@@ -133,11 +162,29 @@ export function mapCoresaProductInMercadoLibre(
   const createdAt =
     scalarToString(nested.createdAt ?? nested.created_at).trim() || undefined;
 
+  const listingType = scalarToString(nested.listing_type ?? nested.listingType)
+    .trim()
+    .toLowerCase();
+  const units = Math.floor(
+    toNumber(nested.units_per_listing ?? nested.unitsPerListing),
+  );
+  const modalidad =
+    scalarToString(nested.modalidad).trim().toLowerCase() || null;
+  const factor = toNumber(nested.price_factor ?? nested.priceFactor);
+  const origen = scalarToString(nested.origen).trim().toLowerCase();
+
   return {
     sku,
     mla,
     updateStock: readBool(nested.updateStock ?? nested.update_stock, true),
     updatePrice: readBool(nested.updatePrice ?? nested.update_price, true),
+    // Un valor que no se entiende se trata como desconocido, que es lo que
+    // frena al actualizador. Completarlo con un default sería suponer.
+    listingType: isMeliListingType(listingType) ? listingType : null,
+    unitsPerListing: units >= 1 ? units : null,
+    modalidad,
+    priceFactor: factor > 0 ? factor : 1,
+    origen: isCoresaListingOrigen(origen) ? origen : 'heredado',
     createdAt,
   };
 }

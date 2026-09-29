@@ -1,3 +1,5 @@
+import { PublicationVariant } from './PublicationVariant';
+
 export class DraftAttribute {
   id: string;
   value_id?: string;
@@ -26,8 +28,14 @@ export class PublicationDraft {
   sale_terms?: DraftAttribute[];
   shipping: DraftShipping;
   description: string;
-  /** Por ahora solo clásica. meli-api publica los dos tipos si no se le dice. */
+  /** El tipo de la variante. meli-api publica los dos tipos si no se le dice. */
   listing_types?: string[];
+  /**
+   * Con qué forma se publica: tipo, unidades y modalidad. Viaja dentro del
+   * borrador para que el publicador pueda registrarla cuando ML devuelva el
+   * MLA, y se saca del payload antes de mandarlo a meli-api.
+   */
+  variant?: PublicationVariant;
 }
 
 export class ListingValidation {

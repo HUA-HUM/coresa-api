@@ -76,6 +76,7 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
       Precio_Convertido: 9983,
       Disponible: 100,
     }),
+    listVariantsBySku: jest.fn().mockResolvedValue([]),
     getMercadoLibreProductByMla: jest.fn(),
     upsertProductInMercadoLibre: jest.fn(),
     startProcessRun: jest.fn(),
@@ -95,11 +96,11 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
   return new PreviewCoresaPublication(
-    deps.coresaRepo as never,
+    deps.coresaRepo,
     deps.meliPublish as never,
-    deps.enrichment as never,
+    deps.enrichment,
     deps.publications as never,
-    deps.internalApi as never,
+    deps.internalApi,
   );
 }
 
@@ -265,5 +266,126 @@ describe('PreviewCoresaPublication', () => {
     expect(deps.publications.create).not.toHaveBeenCalled();
     expect(result.publicationId).toBeNull();
     expect(result.status).toBe('ready');
+  });
+  it('cotiza la variante a partir del precio base y las unidades del empaque', async () => {
+    const deps = buildDeps();
+    // Coresa cotiza la caja de 100 a 919209: la unidad sale 9192.
+    deps.internalApi.getCoresaProductBySku.mockResolvedValue({
+      SKU: 'PC12NW',
+      Precio_Convertido: 919209,
+      base_units: 100,
+      Disponible: 250,
+    });
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      unitsPerListing: 6,
+      priceFactor: 1.15,
+      listingType: 'gold_pro',
+      modalidad: 'x12',
+    });
+
+    expect(result.draft.price).toBe(63425);
+    // 250 unidades sueltas son 41 packs de 6.
+    expect(result.draft.available_quantity).toBe(41);
+    expect(result.draft.listing_types).toEqual(['gold_pro']);
+    expect(result.variant).toEqual({
+      listingType: 'gold_pro',
+      unitsPerListing: 6,
+      modalidad: 'x12',
+      priceFactor: 1.15,
+    });
+  });
+
+  it('sin variante publica una unidad suelta en clásica al contado', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(result.draft.price).toBe(9983);
+    expect(result.draft.available_quantity).toBe(100);
+    expect(result.variant).toEqual({
+      listingType: 'gold_special',
+      unitsPerListing: 1,
+      modalidad: 'contado',
+      priceFactor: 1,
+    });
+  });
+
+  it('le dice a la IA cuántas unidades vende la publicación', async () => {
+    const deps = buildDeps();
+
+    await buildInteractor(deps).execute({ sku: 'PC12NW', unitsPerListing: 6 });
+
+    // El título se arma sabiendo que es un pack: a 60 caracteres no hay lugar
+    // para pegarle un "Pack X 6" después.
+    expect(deps.enrichment.buildContent).toHaveBeenCalledWith(
+      product,
+      categoryAttributes,
+      expect.objectContaining({ unitsPerListing: 6 }),
+    );
+  });
+
+  it('no deja publicar dos veces la misma variante', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([
+      {
+        sku: 'PC12NW',
+        mla: 'MLA333',
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
+    ]);
+
+    await expect(
+      buildInteractor(deps).execute({ sku: 'PC12NW' }),
+    ).rejects.toThrow(/MLA333/);
+    // Se corta antes de gastar la llamada a OpenAI.
+    expect(deps.enrichment.buildContent).not.toHaveBeenCalled();
+  });
+
+  it('deja publicar otra variante del mismo SKU', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([
+      {
+        sku: 'PC12NW',
+        mla: 'MLA333',
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
+    ]);
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      unitsPerListing: 6,
+    });
+
+    expect(result.draft.price).toBe(59898);
+    expect(result.publishedVariants).toHaveLength(1);
+  });
+
+  it('rechaza unidades y recargos imposibles antes de cotizar', async () => {
+    const deps = buildDeps();
+
+    await expect(
+      buildInteractor(deps).execute({ sku: 'PC12NW', unitsPerListing: 0 }),
+    ).rejects.toThrow(/unitsPerListing/);
+    await expect(
+      buildInteractor(deps).execute({ sku: 'PC12NW', priceFactor: 100 }),
+    ).rejects.toThrow(/priceFactor/);
+    await expect(
+      buildInteractor(deps).execute({ sku: 'PC12NW', listingType: 'gold_x' }),
+    ).rejects.toThrow(/listingType/);
+    expect(deps.coresaRepo.getProductBySku).not.toHaveBeenCalled();
   });
 });

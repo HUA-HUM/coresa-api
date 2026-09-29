@@ -45,6 +45,7 @@ describe('SyncCoresaCatalog', () => {
       upsertCoresaProducts,
       listCoresaProductsInMercadoLibre: jest.fn(),
       getCoresaProductBySku: jest.fn(),
+      listVariantsBySku: jest.fn(),
       getMercadoLibreProductByMla: jest.fn(),
       upsertProductInMercadoLibre: jest.fn(),
       startProcessRun: jest.fn().mockResolvedValue(null),
@@ -63,11 +64,15 @@ describe('SyncCoresaCatalog', () => {
       {
         ...products[0],
         Precio_Convertido: 998250,
+        // A cuántas unidades corresponde ese precio: el publicador y el
+        // actualizador dividen por acá para sacar el precio unitario.
+        base_units: 100,
         Disponible: 250,
       },
       {
         ...products[1],
         Precio_Convertido: Math.round(20 * 2 * 1000 * 0.5 * 1.105 * 1.5),
+        base_units: 2,
         Disponible: 5,
       },
     ]);

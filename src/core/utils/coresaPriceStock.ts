@@ -143,6 +143,10 @@ export function priceCoresaProduct(
     ...product,
     SKU: sku,
     Precio_Convertido: price,
+    // El precio se compone sobre el empaque de Coresa, así que se guarda a
+    // cuántas unidades corresponde: el publicador y el actualizador dividen
+    // por este número para sacar el precio unitario.
+    base_units: packQuantity(product.CantIntermedia),
     Disponible: totalStock(product.Disponible),
   };
 }

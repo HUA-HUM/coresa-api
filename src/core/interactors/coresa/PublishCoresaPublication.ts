@@ -25,6 +25,11 @@ import {
   PublicationCreation,
   PublicationDraft,
 } from '../../entities/PublicationDraft';
+import {
+  DEFAULT_VARIANT,
+  describeVariant,
+  PublicationVariant,
+} from '../../entities/PublicationVariant';
 
 export class PublishCoresaPublicationInput {
   publicationId: number;
@@ -86,20 +91,39 @@ export class PublishCoresaPublication {
 
     await this.retryMissingDescriptions(creation, draft.description);
 
+    const variant = draft.variant ?? DEFAULT_VARIANT;
     const classic = creation.results?.[LISTING_TYPE_CLASSIC];
     const premium = creation.results?.[LISTING_TYPE_PREMIUM];
     const classicItemId = this.itemIdOf(classic);
     const premiumItemId = this.itemIdOf(premium);
-    const status = this.resolveStatus(classicItemId, premiumItemId);
+
+    // El MLA de la variante que se pidió: es el único que se puede registrar
+    // con estos datos de variante.
+    const requestedItemId =
+      variant.listingType === LISTING_TYPE_PREMIUM
+        ? premiumItemId
+        : classicItemId;
+    const otherItemId =
+      variant.listingType === LISTING_TYPE_PREMIUM
+        ? classicItemId
+        : premiumItemId;
+
+    const status = this.resolveStatus(requestedItemId, otherItemId);
     const permalink = classic?.permalink ?? premium?.permalink ?? null;
 
-    if (premiumItemId && !premium?.conflict) {
+    const other =
+      variant.listingType === LISTING_TYPE_PREMIUM ? classic : premium;
+    if (otherItemId && !other?.conflict) {
       this.logger.warn(
-        `[publish] SKU ${draft.sku}: se pidió solo clásica y meli-api creó también la premium ${premiumItemId}`,
+        `[publish] SKU ${draft.sku}: se pidió ${variant.listingType} y meli-api creó también ${otherItemId}, que queda sin registrar`,
       );
     }
 
-    const linkedForSync = await this.linkForSync(draft.sku, classicItemId);
+    const linkedForSync = await this.linkForSync(
+      draft.sku,
+      requestedItemId,
+      variant,
+    );
 
     if (this.registryEnabled) {
       await this.publications.update(input.publicationId, {
@@ -115,7 +139,8 @@ export class PublishCoresaPublication {
     }
 
     this.logger.log(
-      `[publish] SKU ${draft.sku} ${status} clásica=${classicItemId ?? '-'} premium=${premiumItemId ?? '-'}`,
+      `[publish] SKU ${draft.sku} (${describeVariant(variant)}) ${status} ` +
+        `clásica=${classicItemId ?? '-'} premium=${premiumItemId ?? '-'}`,
     );
 
     return {
@@ -198,32 +223,49 @@ export class PublishCoresaPublication {
   }
 
   /**
-   * Hoy se publica solo la clásica: si salió, la publicación está completa.
-   * Si meli-api todavía crea las dos, la premium se registra igual pero no
-   * define el estado.
+   * Se publica un tipo por vez, el de la variante: si ese salió, la
+   * publicación está completa. Si meli-api creó el otro tipo igual, queda
+   * registrado en la publicación pero no define el estado.
    */
   private resolveStatus(
-    classicItemId: string | null,
-    premiumItemId: string | null,
+    requestedItemId: string | null,
+    otherItemId: string | null,
   ): CoresaPublicationStatus {
-    if (classicItemId) return 'published';
-    if (premiumItemId) return 'partial';
+    if (requestedItemId) return 'published';
+    if (otherItemId) return 'partial';
     return 'failed';
   }
 
   /**
-   * Deja el SKU vinculado a la publicación para que el actualizador le
-   * mantenga precio y stock desde la corrida siguiente. Si internal-api
-   * falla, la publicación ya está hecha: se avisa y se sigue.
+   * Deja el SKU vinculado a la publicación, con la variante que se acaba de
+   * crear, para que el actualizador le componga precio y stock desde la
+   * corrida siguiente. Es el único momento en que estos datos son ciertos sin
+   * que nadie los adivine: por eso se guardan acá y con origen 'publicador'.
+   *
+   * Si internal-api falla, la publicación ya está hecha: se avisa y se sigue.
+   * La fila queda sin registrar y el actualizador no la va a tocar, que es el
+   * lado seguro del error.
    */
-  private async linkForSync(sku: string, mla: string | null): Promise<boolean> {
+  private async linkForSync(
+    sku: string,
+    mla: string | null,
+    variant: PublicationVariant,
+  ): Promise<boolean> {
     if (!mla) return false;
 
     try {
       await this.internalApi.upsertProductInMercadoLibre(sku, mla, {
         updatePrice: true,
         updateStock: true,
+        listingType: variant.listingType,
+        unitsPerListing: variant.unitsPerListing,
+        modalidad: variant.modalidad,
+        priceFactor: variant.priceFactor,
+        origen: 'publicador',
       });
+      this.logger.log(
+        `[publish] ${mla} (${sku}) registrado para el actualizador como ${describeVariant(variant)}`,
+      );
       return true;
     } catch (err) {
       this.logger.warn(

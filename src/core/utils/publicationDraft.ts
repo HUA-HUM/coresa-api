@@ -1,10 +1,10 @@
 import { EnrichedProductContent } from '../adapters/repositories/IProductEnrichmentRepository';
 import { CoresaProduct } from '../entities/CoresaProduct';
+import { DraftAttribute, PublicationDraft } from '../entities/PublicationDraft';
 import {
-  DraftAttribute,
-  LISTING_TYPE_CLASSIC,
-  PublicationDraft,
-} from '../entities/PublicationDraft';
+  DEFAULT_VARIANT,
+  PublicationVariant,
+} from '../entities/PublicationVariant';
 import { toNumber } from './coresaPriceStock';
 
 export const DEFAULT_WARRANTY_TYPE = 'Garantía del vendedor';
@@ -114,6 +114,7 @@ export function withProductAttributes(
   product: CoresaProduct,
   content: EnrichedProductContent,
   allowedIds: Set<string>,
+  unitsPerListing: number = 1,
 ): DraftAttribute[] {
   const result = [...attributes];
   const present = new Set(result.map((attribute) => attribute.id));
@@ -123,7 +124,12 @@ export function withProductAttributes(
     { id: 'IMPORT_DUTY', value_name: DEFAULT_IMPORT_DUTY },
     { id: 'BRAND', value_name: String(product.Marca ?? '').trim() },
     { id: 'MODEL', value_name: content.model },
-    { id: 'GTIN', value_name: getGtin(product) },
+    // El código de barras de la unidad no identifica al pack, y ML lo valida
+    // contra su base global: en un pack es preferible no mandarlo.
+    {
+      id: 'GTIN',
+      value_name: unitsPerListing > 1 ? '' : getGtin(product),
+    },
   ];
 
   for (const candidate of candidates) {
@@ -143,8 +149,8 @@ export function buildPictures(product: CoresaProduct): string[] {
 }
 
 /**
- * El precio y el stock salen de coresa_products, donde el sync de catálogo
- * ya los dejó calculados; acá no se recalcula nada.
+ * El precio y el stock llegan ya compuestos para la variante; acá no se
+ * recalcula nada.
  */
 export function buildPublicationDraft(params: {
   product: CoresaProduct;
@@ -153,8 +159,10 @@ export function buildPublicationDraft(params: {
   price: number;
   availableQuantity: number;
   allowedAttributeIds: Set<string>;
+  variant?: PublicationVariant;
 }): PublicationDraft {
   const { product, categoryId, content, price, availableQuantity } = params;
+  const variant = params.variant ?? DEFAULT_VARIANT;
 
   return {
     sku: String(product.SKU ?? '').trim(),
@@ -170,6 +178,7 @@ export function buildPublicationDraft(params: {
         product,
         content,
         params.allowedAttributeIds,
+        variant.unitsPerListing,
       ),
       ...packageAttributes(product),
     ],
@@ -182,6 +191,7 @@ export function buildPublicationDraft(params: {
       free_shipping: getFreeShipping(),
     },
     description: content.description,
-    listing_types: [LISTING_TYPE_CLASSIC],
+    listing_types: [variant.listingType],
+    variant,
   };
 }

@@ -64,7 +64,7 @@ function buildDeps() {
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
   return new PublishCoresaPublication(
-    deps.meliPublish as never,
+    deps.meliPublish,
     deps.publications as never,
     deps.internalApi as never,
   );
@@ -163,15 +163,25 @@ describe('PublishCoresaPublication', () => {
     expect(deps.internalApi.upsertProductInMercadoLibre).not.toHaveBeenCalled();
   });
 
-  it('vincula la publicación al actualizador con las dos banderas prendidas', async () => {
+  it('vincula la publicación al actualizador con la variante publicada', async () => {
     const deps = buildDeps();
 
     const result = await buildInteractor(deps).execute({ publicationId: 7 });
 
+    // Es el único momento en que estos datos son ciertos sin adivinarlos: sin
+    // ellos el actualizador no puede componer el precio de esta publicación.
     expect(deps.internalApi.upsertProductInMercadoLibre).toHaveBeenCalledWith(
       'PC12NW',
       'MLA111',
-      { updatePrice: true, updateStock: true },
+      {
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
     );
     expect(result.linkedForSync).toBe(true);
   });

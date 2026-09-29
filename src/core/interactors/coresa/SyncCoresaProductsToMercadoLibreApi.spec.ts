@@ -16,6 +16,26 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     Disponible: 250,
   };
 
+  /** Una fila ya registrada por el publicador: unidad suelta, sin recargo. */
+  function link(
+    sku: string,
+    mla: string,
+    over: Partial<CoresaProductInMercadoLibre> = {},
+  ): CoresaProductInMercadoLibre {
+    return {
+      sku,
+      mla,
+      updatePrice: true,
+      updateStock: true,
+      listingType: 'gold_special',
+      unitsPerListing: 1,
+      modalidad: 'contado',
+      priceFactor: 1,
+      origen: 'publicador',
+      ...over,
+    };
+  }
+
   /** meli-api aplicando todo lo que se le pidió. */
   function applied(
     mla: string,
@@ -38,9 +58,10 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       upsertCoresaProducts: jest.fn(),
       listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([]),
       getCoresaProductBySku: jest.fn().mockResolvedValue(desired),
+      listVariantsBySku: jest.fn().mockResolvedValue([]),
       getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
         meli_item_id: 'MLA1',
-        price: 100,
+        price: 900000,
         available_quantity: 1,
       }),
       upsertProductInMercadoLibre: jest.fn(),
@@ -63,8 +84,8 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
 
   it('manda solo el campo que difiere y está habilitado', async () => {
     const links: CoresaProductInMercadoLibre[] = [
-      { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-      { sku: 'B', mla: 'MLA2', updatePrice: false, updateStock: true },
+      link('A', 'MLA1'),
+      link('B', 'MLA2', { updatePrice: false }),
     ];
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue(links),
@@ -77,7 +98,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
         Promise.resolve(
           mla === 'MLA2'
             ? { meli_item_id: 'MLA2', price: 1, available_quantity: 9 }
-            : { meli_item_id: 'MLA1', price: 100, available_quantity: 1 },
+            : { meli_item_id: 'MLA1', price: 900000, available_quantity: 1 },
         ),
       ),
     });
@@ -105,16 +126,14 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest
         .fn()
-        .mockResolvedValue([
-          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: false },
-        ]),
+        .mockResolvedValue([link('A', 'MLA1', { updateStock: false })]),
     });
     const updateListing = jest.fn().mockResolvedValue({
       meli_item_id: 'MLA1',
       status: 'active',
       sub_status: [],
       requested: { price: 998250 },
-      applied: { price: 100 },
+      applied: { price: 900000 },
       changed: false,
     });
 
@@ -129,9 +148,9 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       sku: 'A',
       mla: 'MLA1',
       result: 'not_applied',
-      priceBefore: 100,
+      priceBefore: 900000,
       priceRequested: 998250,
-      priceApplied: 100,
+      priceApplied: 900000,
       stockBefore: null,
       stockRequested: null,
       stockApplied: null,
@@ -144,9 +163,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest
         .fn()
-        .mockResolvedValue([
-          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-        ]),
+        .mockResolvedValue([link('A', 'MLA1')]),
     });
     const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
       Promise.resolve(applied(mla, patch)),
@@ -174,9 +191,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest
         .fn()
-        .mockResolvedValue([
-          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-        ]),
+        .mockResolvedValue([link('A', 'MLA1')]),
       getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
         meli_item_id: 'MLA1',
         price: 998250,
@@ -197,10 +212,12 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
 
   it('registra el fallo cuando meli-api tira error y sigue con el resto', async () => {
     const internalApi = repo({
-      listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([
-        { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: false },
-        { sku: 'A', mla: 'MLA2', updatePrice: true, updateStock: false },
-      ]),
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([
+          link('A', 'MLA1', { updateStock: false }),
+          link('A', 'MLA2', { updateStock: false }),
+        ]),
     });
     const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
       mla === 'MLA1'
@@ -225,10 +242,9 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
 
   it('omite las filas sin producto o sin publicación', async () => {
     const internalApi = repo({
-      listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([
-        { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-        { sku: 'B', mla: 'MLA2', updatePrice: true, updateStock: true },
-      ]),
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([link('A', 'MLA1'), link('B', 'MLA2')]),
       getCoresaProductBySku: jest.fn((sku: string) =>
         Promise.resolve(sku === 'A' ? desired : null),
       ),
@@ -277,9 +293,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       startProcessRun: jest.fn().mockResolvedValue(null),
       listCoresaProductsInMercadoLibre: jest
         .fn()
-        .mockResolvedValue([
-          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-        ]),
+        .mockResolvedValue([link('A', 'MLA1')]),
     });
     const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
       Promise.resolve(applied(mla, patch)),
@@ -299,9 +313,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest
         .fn()
-        .mockResolvedValue([
-          { sku: 'A', mla: 'MLA1', updatePrice: true, updateStock: true },
-        ]),
+        .mockResolvedValue([link('A', 'MLA1')]),
     });
     const updateListing = jest
       .fn()
@@ -325,7 +337,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       sku: 'A',
       mla: 'MLA1',
       result: 'failed',
-      priceBefore: 100,
+      priceBefore: 900000,
       priceRequested: 998250,
       priceApplied: null,
       stockBefore: 1,
@@ -334,5 +346,115 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       errorCode: 'item.status.invalid',
       errorMessage: 'Item is not active',
     });
+  });
+  it('compone el precio de la variante a partir del precio base del SKU', async () => {
+    // Coresa cotiza la caja de 100 a 919209: la unidad sale 9192. La
+    // publicación vende packs de 6 con un 15% de recargo por la modalidad.
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([
+          link('A', 'MLA1', { unitsPerListing: 6, priceFactor: 1.15 }),
+        ]),
+      getCoresaProductBySku: jest.fn().mockResolvedValue({
+        SKU: 'A',
+        Precio_Convertido: 919209,
+        base_units: 100,
+        Disponible: 250,
+      }),
+      getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
+        meli_item_id: 'MLA1',
+        price: 60000,
+        available_quantity: 0,
+      }),
+    });
+    const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
+      Promise.resolve(applied(mla, patch)),
+    );
+
+    await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    expect(updateListing).toHaveBeenCalledWith('MLA1', {
+      price: 63425,
+      available_quantity: 41,
+    });
+  });
+
+  it('no toca las filas sin variante cargada', async () => {
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([
+        link('A', 'MLA1', {
+          listingType: null,
+          unitsPerListing: null,
+          modalidad: null,
+          origen: 'heredado',
+        }),
+      ]),
+    });
+    const updateListing = jest.fn();
+
+    const summary = await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    // Sin saber si vende de a 1 o de a 100 no hay precio posible: se deja
+    // quieta en vez de suponer.
+    expect(updateListing).not.toHaveBeenCalled();
+    expect(summary.skipped).toBe(1);
+    expect(summary.items[0].reason).toMatch(/units_per_listing/);
+  });
+
+  it('frena un precio que se va más de x2 y no lo manda', async () => {
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([link('A', 'MLA1', { updateStock: false })]),
+      getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
+        meli_item_id: 'MLA1',
+        price: 9192,
+        available_quantity: 250,
+      }),
+    });
+    const updateListing = jest.fn();
+
+    const summary = await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    expect(updateListing).not.toHaveBeenCalled();
+    expect(summary.skipped).toBe(1);
+    expect(summary.items[0].reason).toMatch(/precio frenado/);
+  });
+
+  it('manda el stock aunque el precio haya quedado frenado', async () => {
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest
+        .fn()
+        .mockResolvedValue([link('A', 'MLA1')]),
+      getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
+        meli_item_id: 'MLA1',
+        price: 9192,
+        available_quantity: 3,
+      }),
+    });
+    const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
+      Promise.resolve(applied(mla, patch)),
+    );
+
+    const summary = await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    expect(updateListing).toHaveBeenCalledWith('MLA1', {
+      available_quantity: 250,
+    });
+    expect(summary.updated).toBe(1);
+    expect(summary.items[0].reason).toMatch(/precio frenado/);
   });
 });
