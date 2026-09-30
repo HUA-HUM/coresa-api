@@ -42,6 +42,53 @@ describe('APIInternalApiRepository', () => {
     expect(config.headers['x-internal-api-key']).toBe('_internal');
   });
 
+  it('corta el catálogo en lotes chicos: internal-api acepta 100 kb', async () => {
+    delete process.env.INTERNAL_API_CHUNK_SIZE;
+    const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
+    const repo = new APIInternalApiRepository({ request } as never);
+    const products = Array.from({ length: 120 }, (_, i) => ({ SKU: `S${i}` }));
+
+    await repo.upsertCoresaProducts(products);
+
+    // 120 productos en lotes de 50: tres pedidos, ninguno cerca del límite.
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it('parte el lote al medio si internal-api lo rechaza por tamaño', async () => {
+    process.env.INTERNAL_API_CHUNK_SIZE = '4';
+    const request = jest.fn((config: { data: { products: unknown[] } }) =>
+      config.data.products.length > 2
+        ? Promise.resolve({
+            status: 413,
+            data: { message: 'request entity too large' },
+          })
+        : Promise.resolve({ status: 200, data: {} }),
+    );
+    const repo = new APIInternalApiRepository({ request } as never);
+    const products = Array.from({ length: 4 }, (_, i) => ({ SKU: `S${i}` }));
+
+    await repo.upsertCoresaProducts(products);
+
+    // El de 4 vuelve 413 y se reintenta en dos de 2: se sincroniza igual en
+    // vez de perder el catálogo entero.
+    const tamaños = (
+      request.mock.calls as Array<[{ data: { products: unknown[] } }]>
+    ).map((call) => call[0].data.products.length);
+    expect(tamaños).toEqual([4, 2, 2]);
+  });
+
+  it('no parte un lote de uno solo: ahí el 413 es un error de verdad', async () => {
+    process.env.INTERNAL_API_CHUNK_SIZE = '1';
+    const request = jest
+      .fn()
+      .mockResolvedValue({ status: 413, data: { message: 'too large' } });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(repo.upsertCoresaProducts([{ SKU: 'S1' }])).rejects.toThrow(
+      /413/,
+    );
+  });
+
   it('no llama al bulk si no hay productos', async () => {
     const request = jest.fn();
     const repo = new APIInternalApiRepository({ request } as never);
