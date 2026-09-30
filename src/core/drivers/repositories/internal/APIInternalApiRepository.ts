@@ -32,8 +32,15 @@ export class APIInternalApiRepository {
     return process.env.INTERNAL_API_KEY ?? '';
   }
 
+  /**
+   * internal-api corre con el límite de body que trae Nest de fábrica, que
+   * son 100 kb. Un producto de Coresa pesa cerca de 1,4 kb, así que un lote de
+   * 500 arma un pedido de 700 kb y vuelve 413 "request entity too large". Con
+   * 50 el pedido queda en unos 70 kb, con margen para que el producto crezca.
+   */
   private get chunkSize(): number {
-    return Number(process.env.INTERNAL_API_CHUNK_SIZE ?? 500);
+    const size = Number(process.env.INTERNAL_API_CHUNK_SIZE ?? 50);
+    return Number.isFinite(size) && size > 0 ? size : 50;
   }
 
   private get pageLimit(): number {
@@ -141,18 +148,53 @@ export class APIInternalApiRepository {
     if (products.length === 0) return;
 
     for (const batch of this.chunk(products, this.chunkSize)) {
-      const config = this.prepareRequest(
-        '/internal/coresa/products/bulk',
-        {},
-        { products: batch },
-      );
-      const response = await this.request(config);
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(
-          `[internal-api] upsert coresa -> ${response.status}: ${JSON.stringify(response.data)}`,
-        );
-      }
+      await this.upsertBatch(batch);
     }
+  }
+
+  /**
+   * Si el lote igual entra muy grande, se parte al medio y se reintenta en vez
+   * de perder la sincronización entera: el tamaño del producto depende de los
+   * datos que mande Coresa y puede crecer sin aviso.
+   */
+  private async upsertBatch(batch: CoresaProduct[]): Promise<void> {
+    const config = this.prepareRequest(
+      '/internal/coresa/products/bulk',
+      {},
+      { products: batch },
+    );
+
+    let response: Awaited<ReturnType<typeof this.request>>;
+    try {
+      response = await this.request(config);
+    } catch (err) {
+      if (this.isTooLarge(err) && batch.length > 1) {
+        return this.splitAndRetry(batch);
+      }
+      throw err;
+    }
+
+    if (response.status === 413 && batch.length > 1) {
+      return this.splitAndRetry(batch);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `[internal-api] upsert coresa -> ${response.status}: ${JSON.stringify(response.data)}`,
+      );
+    }
+  }
+
+  private isTooLarge(err: unknown): boolean {
+    return axios.isAxiosError(err) && err.response?.status === 413;
+  }
+
+  private async splitAndRetry(batch: CoresaProduct[]): Promise<void> {
+    const half = Math.ceil(batch.length / 2);
+    this.logger.warn(
+      `[internal-api] lote de ${batch.length} productos rechazado por tamaño, se parte en ${half}`,
+    );
+    await this.upsertBatch(batch.slice(0, half));
+    await this.upsertBatch(batch.slice(half));
   }
 
   private readTotal(payload: unknown): number | null {
