@@ -1,9 +1,18 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import {
   IInternalApiRepository,
   IInternalApiRepositoryToken,
 } from '../../adapters/repositories/IInternalApiRepository';
-import { FinancingCost } from '../../entities/FinancingCost';
+import {
+  FinancingCost,
+  FinancingCostChanges,
+  NewFinancingCost,
+} from '../../entities/FinancingCost';
 import {
   canonicalModalidad,
   FINANCING_COST,
@@ -72,6 +81,43 @@ export class FinancingCosts {
   /** Solo las que se ofrecen hoy, para el desplegable del panel. */
   async listActive(): Promise<FinancingCost[]> {
     return (await this.list()).filter((cost) => cost.activa);
+  }
+
+  /**
+   * Cambiar un costo cambia el precio de todo lo que se publique despues, asi
+   * que el cache se tira al piso: seguir cotizando cinco minutos con el valor
+   * viejo despues de que alguien lo corrigio en el panel seria peor que
+   * pedirlo de nuevo.
+   */
+  async update(
+    modalidad: string,
+    changes: FinancingCostChanges,
+  ): Promise<FinancingCost | null> {
+    const actualizada = await this.internalApi.updateFinancingCost(
+      canonicalModalidad(modalidad),
+      changes,
+    );
+    this.cache = null;
+    this.logger.log(
+      `[cuotas] ${modalidad} editada: ${Object.keys(changes).join(', ')}`,
+    );
+    return actualizada;
+  }
+
+  async create(cost: NewFinancingCost): Promise<FinancingCost | null> {
+    const modalidad = canonicalModalidad(cost.modalidad);
+    if (!modalidad) {
+      throw new BadRequestException('modalidad es obligatoria');
+    }
+
+    const creada = await this.internalApi.createFinancingCost({
+      ...cost,
+      modalidad,
+      etiqueta: cost.etiqueta?.trim() || modalidad,
+    });
+    this.cache = null;
+    this.logger.log(`[cuotas] modalidad nueva: ${modalidad}`);
+    return creada;
   }
 
   /**

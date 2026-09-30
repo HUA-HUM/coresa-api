@@ -17,8 +17,8 @@ const tabla = [
   },
 ];
 
-function build(listFinancingCosts: jest.Mock) {
-  return new FinancingCosts({ listFinancingCosts } as never);
+function build(listFinancingCosts: jest.Mock, escrituras: object = {}) {
+  return new FinancingCosts({ listFinancingCosts, ...escrituras } as never);
 }
 
 describe('FinancingCosts', () => {
@@ -158,5 +158,57 @@ describe('mapFinancingCosts', () => {
         activa: true,
       },
     ]);
+  });
+});
+
+describe('FinancingCosts, escritura', () => {
+  it('tira el caché al editar: no puede seguir cotizando con el valor viejo', async () => {
+    const list = jest
+      .fn()
+      .mockResolvedValueOnce([
+        { modalidad: '12_cuotas', etiqueta: '12', costo: 0.216, activa: true },
+      ])
+      .mockResolvedValue([
+        { modalidad: '12_cuotas', etiqueta: '12', costo: 0.23, activa: true },
+      ]);
+    const updateFinancingCost = jest.fn().mockResolvedValue(null);
+    const costs = build(list, { updateFinancingCost });
+
+    expect(await costs.factorFor('12_cuotas')).toBeCloseTo(1 / 0.784, 6);
+    await costs.update('12_cuotas', { costo: 0.23 });
+
+    expect(await costs.factorFor('12_cuotas')).toBeCloseTo(1 / 0.77, 6);
+  });
+
+  it('normaliza el nombre antes de editar', async () => {
+    const updateFinancingCost = jest.fn().mockResolvedValue(null);
+    const costs = build(jest.fn().mockResolvedValue([]), {
+      updateFinancingCost,
+    });
+
+    await costs.update('X12', { costo: 0.2 });
+
+    expect(updateFinancingCost).toHaveBeenCalledWith('12_cuotas', {
+      costo: 0.2,
+    });
+  });
+
+  it('crea una modalidad nueva con el nombre normalizado', async () => {
+    const createFinancingCost = jest.fn().mockResolvedValue(null);
+    const costs = build(jest.fn().mockResolvedValue([]), {
+      createFinancingCost,
+    });
+
+    await costs.create({
+      modalidad: '18 Cuotas',
+      etiqueta: '18 cuotas',
+      costo: 0.28,
+    });
+
+    expect(createFinancingCost).toHaveBeenCalledWith({
+      modalidad: '18_cuotas',
+      etiqueta: '18 cuotas',
+      costo: 0.28,
+    });
   });
 });

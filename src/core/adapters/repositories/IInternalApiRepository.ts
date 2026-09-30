@@ -1,5 +1,9 @@
 import { CoresaProduct } from '../../entities/CoresaProduct';
-import { FinancingCost } from '../../entities/FinancingCost';
+import {
+  FinancingCost,
+  FinancingCostChanges,
+  NewFinancingCost,
+} from '../../entities/FinancingCost';
 import {
   CoresaListingVariantInput,
   CoresaProductInMercadoLibre,
@@ -26,6 +30,11 @@ export interface IInternalApiRepository {
   ): Promise<void>;
   /** Los costos de financiación vigentes, para cotizar las cuotas. */
   listFinancingCosts(): Promise<FinancingCost[]>;
+  updateFinancingCost(
+    modalidad: string,
+    changes: FinancingCostChanges,
+  ): Promise<FinancingCost | null>;
+  createFinancingCost(cost: NewFinancingCost): Promise<FinancingCost | null>;
   /** Las variantes ya publicadas de un SKU, para no publicar dos veces la misma. */
   listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]>;
   upsertProductInMercadoLibre(

@@ -47,6 +47,8 @@ describe('SyncCoresaCatalog', () => {
       getCoresaProductBySku: jest.fn(),
       listVariantsBySku: jest.fn(),
       listFinancingCosts: jest.fn().mockResolvedValue([]),
+      updateFinancingCost: jest.fn(),
+      createFinancingCost: jest.fn(),
       getMercadoLibreProductByMla: jest.fn(),
       upsertProductInMercadoLibre: jest.fn(),
       startProcessRun: jest.fn().mockResolvedValue(null),

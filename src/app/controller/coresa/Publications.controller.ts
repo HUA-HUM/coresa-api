@@ -39,8 +39,6 @@ import {
   CoresaPublicationList,
   CoresaPublicationSummary,
 } from '../../../core/entities/CoresaPublication';
-import { FinancingCost } from '../../../core/entities/FinancingCost';
-import { FinancingCosts } from '../../../core/interactors/coresa/FinancingCosts';
 
 class PreviewPublicationBody {
   sku: string;
@@ -79,19 +77,7 @@ export class PublicationsCoresaController {
     private readonly publishPublication: PublishCoresaPublication,
     private readonly queryPublications: QueryCoresaPublications,
     private readonly updateDraft: UpdateCoresaPublicationDraft,
-    private readonly financingCosts: FinancingCosts,
   ) {}
-
-  @Get('modalidades')
-  @ApiOperation({
-    summary: 'Las modalidades de cuotas que se pueden elegir al publicar',
-    description:
-      'Para el desplegable del panel. El costo viene como fracción (0.216 es 21,6%) y es lo que ML nos cobra por ofrecer esa financiación; el precio se calcula dividiendo por (1 - costo). Se editan en internal-api.',
-  })
-  @ApiOkResponse({ description: 'Modalidades activas' })
-  async modalidades(): Promise<{ items: FinancingCost[] }> {
-    return { items: await this.financingCosts.listActive() };
-  }
 
   @Get()
   @ApiOperation({

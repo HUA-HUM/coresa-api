@@ -14,6 +14,22 @@ export class FinancingCost {
   activa: boolean;
 }
 
+/** Lo que se puede cambiar de una modalidad ya cargada. */
+export class FinancingCostChanges {
+  etiqueta?: string;
+  costo?: number;
+  activa?: boolean;
+  actualizadoPor?: string;
+}
+
+/** Una modalidad nueva: sirve cuando ML saca una promo que hoy no existe. */
+export class NewFinancingCost {
+  modalidad: string;
+  etiqueta: string;
+  costo: number;
+  actualizadoPor?: string;
+}
+
 /** Tope de cordura: un costo mayor a esto es un dato mal cargado. */
 export const MAX_FINANCING_COST = 0.5;
 

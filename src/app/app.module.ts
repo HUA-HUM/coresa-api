@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './controller/Health.controller';
 import { ProductsCoresaController } from './controller/coresa/Products.controller';
+import { ModalidadesCoresaController } from './controller/coresa/Modalidades.controller';
 import { PublicationsCoresaController } from './controller/coresa/Publications.controller';
 import { NestCoresaPublicationRepository } from './drivers/NestCoresaPublicationRepository';
 import { NestCoresaRepository } from './drivers/NestCoresaRepository';
@@ -40,6 +41,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
   controllers: [
     HealthController,
     ProductsCoresaController,
+    ModalidadesCoresaController,
     PublicationsCoresaController,
   ],
   providers: [
