@@ -349,12 +349,12 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
   });
   it('compone el precio de la variante a partir del precio base del SKU', async () => {
     // Coresa cotiza la caja de 100 a 919209: la unidad sale 9192. La
-    // publicación vende packs de 6 con un 15% de recargo por la modalidad.
+    // publicación vende packs de 6 en 6 cuotas, que cuestan un 13,4%.
     const internalApi = repo({
       listCoresaProductsInMercadoLibre: jest
         .fn()
         .mockResolvedValue([
-          link('A', 'MLA1', { unitsPerListing: 6, priceFactor: 1.15 }),
+          link('A', 'MLA1', { unitsPerListing: 6, modalidad: '6_cuotas' }),
         ]),
       getCoresaProductBySku: jest.fn().mockResolvedValue({
         SKU: 'A',
@@ -377,8 +377,9 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       meliRepo(updateListing),
     ).execute('cron');
 
+    // (919209 / 100) x 6 / 0,866.
     expect(updateListing).toHaveBeenCalledWith('MLA1', {
-      price: 63425,
+      price: 63687,
       available_quantity: 41,
     });
   });

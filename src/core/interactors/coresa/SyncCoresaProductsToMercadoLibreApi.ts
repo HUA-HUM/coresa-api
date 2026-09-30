@@ -16,6 +16,7 @@ import {
 } from '../../entities/CoresaMercadoLibre';
 import {
   baseUnitsOf,
+  priceFactorFor,
   PublicationVariant,
   variantPrice,
   variantStock,
@@ -178,11 +179,14 @@ export class SyncCoresaProductsToMercadoLibreApi {
       };
     }
 
+    // Si la modalidad está en la tabla, manda su costo vigente y no el factor
+    // guardado: cuando ML cambia lo que cobra por las cuotas se toca un solo
+    // lugar en vez de reescribir la variante de cada publicación.
     const variant: PublicationVariant = {
       listingType: link.listingType ?? 'gold_special',
       unitsPerListing: link.unitsPerListing,
       modalidad: link.modalidad ?? 'contado',
-      priceFactor: link.priceFactor,
+      priceFactor: priceFactorFor(link.modalidad) ?? link.priceFactor,
     };
 
     // Se declaran afuera del try para que la fila de error pueda registrar

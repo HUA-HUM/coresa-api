@@ -44,7 +44,9 @@ import {
   MAX_PRICE_FACTOR,
   MELI_LISTING_TYPES,
   MIN_PRICE_FACTOR,
+  MODALIDADES,
   normalizeModalidad,
+  priceFactorFor,
   PublicationVariant,
   sameVariant,
   variantPrice,
@@ -234,8 +236,22 @@ export class PreviewCoresaPublication {
       );
     }
 
+    const modalidad = normalizeModalidad(input.modalidad);
+
+    // El factor sale de la modalidad, no de lo que escriba el panel: así el
+    // costo de la financiación está en un solo lugar y nadie tipea un 1,2755.
+    // Se acepta uno explícito solo para modalidades que no están en la tabla.
+    const derived = priceFactorFor(modalidad);
+    if (input.priceFactor === undefined && derived === null) {
+      throw new BadRequestException(
+        `No conozco el costo de la modalidad "${modalidad}". Usá una de ${MODALIDADES.join(', ')} o mandá priceFactor.`,
+      );
+    }
+
     const priceFactor =
-      input.priceFactor === undefined ? 1 : Number(input.priceFactor);
+      input.priceFactor === undefined
+        ? (derived as number)
+        : Number(input.priceFactor);
     if (
       !Number.isFinite(priceFactor) ||
       priceFactor < MIN_PRICE_FACTOR ||
@@ -246,12 +262,7 @@ export class PreviewCoresaPublication {
       );
     }
 
-    return {
-      listingType,
-      unitsPerListing,
-      modalidad: normalizeModalidad(input.modalidad),
-      priceFactor,
-    };
+    return { listingType, unitsPerListing, modalidad, priceFactor };
   }
 
   /**
