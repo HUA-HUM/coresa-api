@@ -349,13 +349,15 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
   });
   it('compone el precio de la variante a partir del precio base del SKU', async () => {
     // Coresa cotiza la caja de 100 a 919209: la unidad sale 9192. La
-    // publicación vende packs de 6 en 6 cuotas, que cuestan un 13,4%.
+    // publicación vende packs de 6 con el costo de las 6 cuotas cargado.
     const internalApi = repo({
-      listCoresaProductsInMercadoLibre: jest
-        .fn()
-        .mockResolvedValue([
-          link('A', 'MLA1', { unitsPerListing: 6, modalidad: '6_cuotas' }),
-        ]),
+      listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([
+        link('A', 'MLA1', {
+          unitsPerListing: 6,
+          modalidad: '6_cuotas',
+          priceFactor: 1 / 0.866,
+        }),
+      ]),
       getCoresaProductBySku: jest.fn().mockResolvedValue({
         SKU: 'A',
         Precio_Convertido: 919209,
@@ -457,5 +459,37 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
     });
     expect(summary.updated).toBe(1);
     expect(summary.items[0].reason).toMatch(/precio frenado/);
+  });
+  it('respeta el factor guardado aunque la modalidad diga otra cosa', async () => {
+    const internalApi = repo({
+      listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([
+        // ML ofrece 12 cuotas, pero la publicación está al precio de contado.
+        // Que ese costo esté o no cargado en el precio es una decisión
+        // comercial: derivarlo acá le subiría el precio un 27% sin que nadie
+        // lo pida.
+        link('A', 'MLA1', { modalidad: '12_cuotas', priceFactor: 1 }),
+      ]),
+      getCoresaProductBySku: jest.fn().mockResolvedValue({
+        SKU: 'A',
+        Precio_Convertido: 10000,
+        base_units: 1,
+        Disponible: 5,
+      }),
+      getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
+        meli_item_id: 'MLA1',
+        price: 9000,
+        available_quantity: 5,
+      }),
+    });
+    const updateListing = jest.fn((mla: string, patch: MeliListingUpdate) =>
+      Promise.resolve(applied(mla, patch)),
+    );
+
+    await new SyncCoresaProductsToMercadoLibreApi(
+      internalApi,
+      meliRepo(updateListing),
+    ).execute('cron');
+
+    expect(updateListing).toHaveBeenCalledWith('MLA1', { price: 10000 });
   });
 });
