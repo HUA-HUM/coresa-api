@@ -280,21 +280,43 @@ describe('PreviewCoresaPublication', () => {
     const result = await buildInteractor(deps).execute({
       sku: 'PC12NW',
       unitsPerListing: 6,
-      priceFactor: 1.15,
       listingType: 'gold_pro',
       modalidad: 'x12',
     });
 
-    expect(result.draft.price).toBe(63425);
+    // (919209 / 100) x 6 / 0,784, que es el costo de las 12 cuotas.
+    expect(result.draft.price).toBe(70348);
     // 250 unidades sueltas son 41 packs de 6.
     expect(result.draft.available_quantity).toBe(41);
     expect(result.draft.listing_types).toEqual(['gold_pro']);
     expect(result.variant).toEqual({
       listingType: 'gold_pro',
       unitsPerListing: 6,
-      modalidad: 'x12',
-      priceFactor: 1.15,
+      modalidad: '12_cuotas',
+      priceFactor: 1 / 0.784,
     });
+  });
+
+  it('saca el recargo de la modalidad: el panel no manda el coeficiente', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      modalidad: 'cuota_promocionada',
+    });
+
+    // 9983 / 0,95. El costo de la financiación vive en un solo lugar, así
+    // que nadie tipea un 1,0526 a mano.
+    expect(result.draft.price).toBe(10508);
+    expect(result.variant.priceFactor).toBeCloseTo(1 / 0.95, 6);
+  });
+
+  it('no cotiza una modalidad que no conoce', async () => {
+    const deps = buildDeps();
+
+    await expect(
+      buildInteractor(deps).execute({ sku: 'PC12NW', modalidad: '24_cuotas' }),
+    ).rejects.toThrow(/24_cuotas/);
   });
 
   it('sin variante publica una unidad suelta en clásica al contado', async () => {

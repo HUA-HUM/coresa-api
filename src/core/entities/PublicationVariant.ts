@@ -19,6 +19,64 @@ export const MAX_PRICE_FACTOR = 3;
 export const DEFAULT_MODALIDAD = 'contado';
 
 /**
+ * Lo que cuesta cada modalidad de financiación en MercadoLibre, como fracción
+ * del precio de venta.
+ *
+ * Es un costo que se descuenta de lo que cobramos, no un recargo sobre el
+ * costo: para que queden los mismos pesos en la mano hay que DIVIDIR por
+ * (1 - costo), no multiplicar por (1 + costo). En 12 cuotas la diferencia
+ * entre las dos cuentas es de casi seis puntos.
+ *
+ * La cuota promocionada le sale más barata al comprador que la del banco, y
+ * ML nos cobra ese 5% aparte de la comisión por venta.
+ */
+export const FINANCING_COST: Record<string, number> = {
+  contado: 0,
+  cuota_promocionada: 0.05,
+  '3_cuotas': 0.089,
+  '6_cuotas': 0.134,
+  '9_cuotas': 0.178,
+  '12_cuotas': 0.216,
+};
+
+/** Nombres cortos que se usan en el panel y en las planillas. */
+const MODALIDAD_ALIAS: Record<string, string> = {
+  promocionada: 'cuota_promocionada',
+  cuota_promocional: 'cuota_promocionada',
+  promo: 'cuota_promocionada',
+  x3: '3_cuotas',
+  x6: '6_cuotas',
+  x9: '9_cuotas',
+  x12: '12_cuotas',
+  '3': '3_cuotas',
+  '6': '6_cuotas',
+  '9': '9_cuotas',
+  '12': '12_cuotas',
+};
+
+export const MODALIDADES = Object.keys(FINANCING_COST);
+
+/** El nombre con el que se guarda la modalidad, resolviendo los alias. */
+export function canonicalModalidad(value: string | null | undefined): string {
+  const raw = (value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (!raw) return DEFAULT_MODALIDAD;
+  return MODALIDAD_ALIAS[raw] ?? raw;
+}
+
+/**
+ * El multiplicador que hay que aplicarle al precio para que el costo de la
+ * financiación no nos lo coma. Devuelve null si la modalidad no está en la
+ * tabla: ahí no se puede cotizar sola y hace falta un priceFactor explícito.
+ */
+export function priceFactorFor(
+  value: string | null | undefined,
+): number | null {
+  const cost = FINANCING_COST[canonicalModalidad(value)];
+  if (cost === undefined) return null;
+  return 1 / (1 - cost);
+}
+
+/**
  * Con qué forma se publica un SKU. El mismo SKU puede estar publicado varias
  * veces: de a 1 o de a 6, en clásica o premium, al contado o en cuotas. El
  * precio de cada publicación sale de estos cuatro datos.
@@ -28,7 +86,10 @@ export class PublicationVariant {
   /** Cuántas unidades del SKU vende ESA publicación. */
   unitsPerListing: number;
   modalidad: string;
-  /** Recargo de la modalidad: 1 sin recargo, 1.15 un 15% arriba. */
+  /**
+   * Multiplicador que cubre el costo de la financiación: 1 al contado,
+   * 1 / (1 - 0.216) = 1.2755 en 12 cuotas.
+   */
   priceFactor: number;
 }
 
@@ -93,8 +154,7 @@ export function sameVariant(
 }
 
 export function normalizeModalidad(value: string | null | undefined): string {
-  const raw = (value ?? '').trim().toLowerCase();
-  return raw || DEFAULT_MODALIDAD;
+  return canonicalModalidad(value);
 }
 
 /** Para los mensajes del panel: "premium, pack de 6, x12". */

@@ -48,9 +48,15 @@ class PreviewPublicationBody {
   listingType?: string;
   /** Cuántas unidades vende esta publicación. Por defecto, 1. */
   unitsPerListing?: number;
-  /** contado, cuota_simple, x6, x12. Por defecto, contado. */
+  /**
+   * contado, cuota_promocionada, 3_cuotas, 6_cuotas, 9_cuotas o 12_cuotas.
+   * Por defecto, contado.
+   */
   modalidad?: string;
-  /** Recargo de la modalidad: 1 sin recargo, 1.15 un 15% arriba. */
+  /**
+   * Sale de la modalidad y normalmente no se manda. Solo hace falta para una
+   * modalidad que la API todavía no conoce.
+   */
   priceFactor?: number;
 }
 
@@ -150,7 +156,7 @@ export class PublicationsCoresaController {
     summary:
       'Arma el borrador de publicación de un SKU: categoría, atributos, contenido con OpenAI, precio y validación en ML',
     description:
-      'La variante (tipo, unidades y modalidad) define el precio y el contenido: un pack de 6 se cotiza por 6 y la IA escribe el título diciéndolo. Si el SKU ya está publicado con esa misma variante devuelve 409 con el MLA que ya existe.',
+      'La variante (tipo, unidades y modalidad) define el precio y el contenido: un pack de 6 se cotiza por 6 y la IA escribe el título diciéndolo. El costo de la financiación sale de la modalidad, dividiendo por (1 - costo). Si el SKU ya está publicado con esa misma variante devuelve 409 con el MLA que ya existe.',
   })
   @ApiBody({
     schema: {
@@ -160,7 +166,6 @@ export class PublicationsCoresaController {
         listingType: 'gold_special',
         unitsPerListing: 1,
         modalidad: 'contado',
-        priceFactor: 1,
       },
     },
   })
