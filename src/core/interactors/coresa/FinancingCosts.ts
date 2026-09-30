@@ -9,8 +9,11 @@ import {
   IInternalApiRepositoryToken,
 } from '../../adapters/repositories/IInternalApiRepository';
 import {
+  factorToCost,
   FinancingCost,
   FinancingCostChanges,
+  MAX_FINANCING_COST,
+  MAX_FINANCING_FACTOR,
   NewFinancingCost,
 } from '../../entities/FinancingCost';
 import {
@@ -95,13 +98,46 @@ export class FinancingCosts {
   ): Promise<FinancingCost | null> {
     const actualizada = await this.internalApi.updateFinancingCost(
       canonicalModalidad(modalidad),
-      changes,
+      this.resolveCost(changes),
     );
     this.cache = null;
     this.logger.log(
       `[cuotas] ${modalidad} editada: ${Object.keys(changes).join(', ')}`,
     );
     return actualizada;
+  }
+
+  /**
+   * El panel puede mandar el costo o el coeficiente. Se guarda siempre el
+   * costo: es el dato que da ML, y tener las dos columnas en la base sería
+   * tener dos versiones de lo mismo que se pueden contradecir.
+   */
+  private resolveCost(changes: FinancingCostChanges): FinancingCostChanges {
+    const { coeficiente, ...resto } = changes;
+    if (coeficiente === undefined) return resto;
+
+    if (resto.costo !== undefined) {
+      throw new BadRequestException(
+        'Mandá costo o coeficiente, no los dos: son el mismo dato',
+      );
+    }
+    if (
+      !Number.isFinite(coeficiente) ||
+      coeficiente < 1 ||
+      coeficiente > MAX_FINANCING_FACTOR
+    ) {
+      throw new BadRequestException(
+        `El coeficiente tiene que estar entre 1 y ${MAX_FINANCING_FACTOR.toFixed(2)}`,
+      );
+    }
+
+    const costo = factorToCost(coeficiente);
+    if (costo < 0 || costo > MAX_FINANCING_COST) {
+      throw new BadRequestException(
+        `Ese coeficiente da un costo de ${costo}, fuera de 0 a ${MAX_FINANCING_COST}`,
+      );
+    }
+    return { ...resto, costo };
   }
 
   async create(cost: NewFinancingCost): Promise<FinancingCost | null> {

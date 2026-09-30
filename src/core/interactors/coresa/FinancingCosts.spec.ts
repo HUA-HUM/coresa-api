@@ -1,4 +1,8 @@
-import { mapFinancingCosts } from '../../entities/FinancingCost';
+import {
+  costToFactor,
+  factorToCost,
+  mapFinancingCosts,
+} from '../../entities/FinancingCost';
 import { FALLBACK_COSTS, FinancingCosts } from './FinancingCosts';
 
 const tabla = [
@@ -210,5 +214,54 @@ describe('FinancingCosts, escritura', () => {
       etiqueta: '18 cuotas',
       costo: 0.28,
     });
+  });
+});
+
+describe('costo y coeficiente', () => {
+  it('son el mismo dato ida y vuelta', () => {
+    // 21,6% de costo es un coeficiente de 1,2755, y al revés.
+    expect(costToFactor(0.216)).toBeCloseTo(1.2755, 4);
+    expect(factorToCost(1.2755)).toBeCloseTo(0.216, 4);
+    expect(factorToCost(costToFactor(0.089))).toBeCloseTo(0.089, 4);
+    expect(factorToCost(1)).toBe(0);
+  });
+
+  it('el panel puede editar el coeficiente y se guarda el costo', async () => {
+    const updateFinancingCost = jest.fn().mockResolvedValue(null);
+    const costs = build(jest.fn().mockResolvedValue([]), {
+      updateFinancingCost,
+    });
+
+    await costs.update('12_cuotas', { coeficiente: 1.2987 });
+
+    // Se guarda el costo y no las dos columnas: dos versiones del mismo dato
+    // se pueden contradecir.
+    expect(updateFinancingCost).toHaveBeenCalledWith('12_cuotas', {
+      costo: 0.23,
+    });
+  });
+
+  it('rechaza mandar los dos a la vez', async () => {
+    const costs = build(jest.fn().mockResolvedValue([]), {
+      updateFinancingCost: jest.fn(),
+    });
+
+    await expect(
+      costs.update('12_cuotas', { costo: 0.23, coeficiente: 1.5 }),
+    ).rejects.toThrow(/no los dos/);
+  });
+
+  it('rechaza un coeficiente imposible', async () => {
+    const costs = build(jest.fn().mockResolvedValue([]), {
+      updateFinancingCost: jest.fn(),
+    });
+
+    // Menor a 1 seria regalar plata; mayor a 2 pasa el tope de costo de 0,5.
+    await expect(
+      costs.update('12_cuotas', { coeficiente: 0.8 }),
+    ).rejects.toThrow(/entre 1 y 2/);
+    await expect(
+      costs.update('12_cuotas', { coeficiente: 12.755 }),
+    ).rejects.toThrow(/entre 1 y 2/);
   });
 });
