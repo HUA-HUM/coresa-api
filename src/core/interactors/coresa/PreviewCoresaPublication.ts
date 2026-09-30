@@ -44,15 +44,14 @@ import {
   MAX_PRICE_FACTOR,
   MELI_LISTING_TYPES,
   MIN_PRICE_FACTOR,
-  MODALIDADES,
   normalizeModalidad,
-  priceFactorFor,
   PublicationVariant,
   sameVariant,
   variantPrice,
   variantStock,
 } from '../../entities/PublicationVariant';
 import { toNumber } from '../../utils/coresaPriceStock';
+import { FinancingCosts } from './FinancingCosts';
 import { missingRequiredAttributes } from '../../utils/enrichment';
 import { buildPublicationDraft } from '../../utils/publicationDraft';
 
@@ -99,6 +98,7 @@ export class PreviewCoresaPublication {
     private readonly publications: ICoresaPublicationRepository,
     @Inject(IInternalApiRepositoryToken)
     private readonly internalApi: IInternalApiRepository,
+    private readonly financingCosts: FinancingCosts,
   ) {}
 
   /** Permite trabajar en local mientras internal-api todavía no tiene la tabla. */
@@ -115,7 +115,7 @@ export class PreviewCoresaPublication {
     const sku = String(input.sku ?? '').trim();
     if (!sku) throw new BadRequestException('sku es obligatorio');
 
-    const variant = this.resolveVariant(input);
+    const variant = await this.resolveVariant(input);
 
     const product = await this.coresaRepo.getProductBySku(sku);
     if (!product) {
@@ -218,9 +218,9 @@ export class PreviewCoresaPublication {
    * común. Se validan acá y no más adelante porque de estos números sale el
    * precio: un 100 donde va un 1 multiplica el precio por 100.
    */
-  private resolveVariant(
+  private async resolveVariant(
     input: PreviewCoresaPublicationInput,
-  ): PublicationVariant {
+  ): Promise<PublicationVariant> {
     const listingType = String(input.listingType ?? 'gold_special').trim();
     if (!isMeliListingType(listingType)) {
       throw new BadRequestException(
@@ -238,13 +238,17 @@ export class PreviewCoresaPublication {
 
     const modalidad = normalizeModalidad(input.modalidad);
 
-    // El factor sale de la modalidad, no de lo que escriba el panel: así el
-    // costo de la financiación está en un solo lugar y nadie tipea un 1,2755.
-    // Se acepta uno explícito solo para modalidades que no están en la tabla.
-    const derived = priceFactorFor(modalidad);
+    // El factor sale del costo que tiene cargado la modalidad, no de lo que
+    // escriba el panel: así el costo de la financiación está en un solo lugar,
+    // editable, y nadie tipea un 1,2755. Se acepta uno explícito solo para
+    // modalidades que no están en la tabla.
+    const derived = await this.financingCosts.factorFor(modalidad);
     if (input.priceFactor === undefined && derived === null) {
+      const conocidas = (await this.financingCosts.listActive())
+        .map((cost) => cost.modalidad)
+        .join(', ');
       throw new BadRequestException(
-        `No conozco el costo de la modalidad "${modalidad}". Usá una de ${MODALIDADES.join(', ')} o mandá priceFactor.`,
+        `No conozco el costo de la modalidad "${modalidad}". Usá una de ${conocidas} o mandá priceFactor.`,
       );
     }
 

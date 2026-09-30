@@ -2,6 +2,10 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { CoresaProduct } from '../../../entities/CoresaProduct';
 import {
+  FinancingCost,
+  mapFinancingCosts,
+} from '../../../entities/FinancingCost';
+import {
   CoresaListingVariantInput,
   CoresaProductInMercadoLibre,
   CoresaSyncChange,
@@ -352,6 +356,15 @@ export class APIInternalApiRepository {
    * Deja el SKU vinculado a la publicación para que el actualizador le
    * mantenga precio y stock. Es un upsert por (sku, mla).
    */
+  async listFinancingCosts(): Promise<FinancingCost[]> {
+    const payload = await this.getOrNull(
+      '/internal/meli/financing-costs',
+      'costos de financiación',
+    );
+    if (payload === null) return [];
+    return mapFinancingCosts(payload);
+  }
+
   async listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]> {
     const encoded = encodeURIComponent(sku);
     const payload = await this.getOrNull(

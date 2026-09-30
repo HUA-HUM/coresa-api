@@ -59,6 +59,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
       listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([]),
       getCoresaProductBySku: jest.fn().mockResolvedValue(desired),
       listVariantsBySku: jest.fn().mockResolvedValue([]),
+      listFinancingCosts: jest.fn().mockResolvedValue([]),
       getMercadoLibreProductByMla: jest.fn().mockResolvedValue({
         meli_item_id: 'MLA1',
         price: 900000,

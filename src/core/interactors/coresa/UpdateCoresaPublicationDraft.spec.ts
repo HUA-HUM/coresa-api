@@ -61,10 +61,7 @@ function buildDeps(status = 'draft') {
 }
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
-  return new UpdateCoresaPublicationDraft(
-    deps.publications as never,
-    deps.meliPublish as never,
-  );
+  return new UpdateCoresaPublicationDraft(deps.publications, deps.meliPublish);
 }
 
 describe('UpdateCoresaPublicationDraft', () => {

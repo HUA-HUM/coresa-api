@@ -21,6 +21,7 @@ import { IInternalApiRepositoryToken } from '../core/adapters/repositories/IInte
 import { IMeliPublishRepositoryToken } from '../core/adapters/repositories/IMeliPublishRepository';
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories/IProductEnrichmentRepository';
+import { FinancingCosts } from '../core/interactors/coresa/FinancingCosts';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
 import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { QueryCoresaPublications } from '../core/interactors/coresa/QueryCoresaPublications';
@@ -74,6 +75,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     SyncCoresaProductsToMercadoLibreApi,
     SyncCoresaCatalogProcess,
     SyncCoresaProductsToMercadoLibreProcess,
+    FinancingCosts,
     PreviewCoresaPublication,
     PublishCoresaPublication,
     QueryCoresaPublications,
