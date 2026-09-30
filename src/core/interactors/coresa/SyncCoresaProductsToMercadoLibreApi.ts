@@ -16,7 +16,6 @@ import {
 } from '../../entities/CoresaMercadoLibre';
 import {
   baseUnitsOf,
-  priceFactorFor,
   PublicationVariant,
   variantPrice,
   variantStock,
@@ -179,14 +178,21 @@ export class SyncCoresaProductsToMercadoLibreApi {
       };
     }
 
-    // Si la modalidad está en la tabla, manda su costo vigente y no el factor
-    // guardado: cuando ML cambia lo que cobra por las cuotas se toca un solo
-    // lugar en vez de reescribir la variante de cada publicación.
+    // El factor que manda es el guardado en la fila, no el que saldría de la
+    // modalidad. La modalidad dice qué cuotas ofrece ML; si ese costo está o
+    // no cargado en el precio es una decisión comercial, fila por fila. En el
+    // catálogo de hoy la mayoría de las publicaciones con 3, 9 o 12 cuotas
+    // están al precio de contado: derivar el factor acá les subiría el precio
+    // hasta un 27% en la primera corrida, sin que nadie lo haya pedido.
+    //
+    // El publicador sí deriva el factor de la modalidad, que es donde va la
+    // regla: una publicación nueva nace con el costo de la financiación
+    // cubierto.
     const variant: PublicationVariant = {
       listingType: link.listingType ?? 'gold_special',
       unitsPerListing: link.unitsPerListing,
       modalidad: link.modalidad ?? 'contado',
-      priceFactor: priceFactorFor(link.modalidad) ?? link.priceFactor,
+      priceFactor: link.priceFactor,
     };
 
     // Se declaran afuera del try para que la fila de error pueda registrar
