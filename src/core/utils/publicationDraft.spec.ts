@@ -5,6 +5,7 @@ import {
   isValidGtin,
   packageDimension,
   packageWeight,
+  saleTerms,
   valueAddedTax,
 } from './publicationDraft';
 
@@ -70,7 +71,11 @@ describe('buildPublicationDraft', () => {
     expect(draft.category_id).toBe('MLA1591');
     expect(draft.condition).toBe('new');
     expect(draft.pictures).toEqual([product.URL_Imagen]);
-    expect(draft.shipping).toEqual({ mode: 'me2', free_shipping: false });
+    expect(draft.shipping).toEqual({
+      mode: 'me2',
+      free_shipping: false,
+      local_pick_up: true,
+    });
     expect(draft.sale_terms?.map((term) => term.id)).toEqual([
       'WARRANTY_TYPE',
       'WARRANTY_TIME',
@@ -298,5 +303,50 @@ describe('packageWeight', () => {
   it('las dimensiones van en cm enteros', () => {
     expect(packageDimension(22.4)).toBe('23 cm');
     expect(packageDimension(0)).toBe('');
+  });
+});
+
+describe('términos de venta y envío', () => {
+  const env = process.env;
+  beforeEach(() => {
+    process.env = { ...env };
+    delete process.env.MELI_HANDLING_TIME_DAYS;
+    delete process.env.MELI_SHIPPING_TAGS;
+    delete process.env.MELI_LOCAL_PICK_UP;
+  });
+  afterEach(() => {
+    process.env = env;
+  });
+
+  it('la garantía del vendedor es de 12 meses', () => {
+    expect(saleTerms()).toEqual([
+      { id: 'WARRANTY_TYPE', value_name: 'Garantía del vendedor' },
+      { id: 'WARRANTY_TIME', value_name: '12 meses' },
+    ]);
+  });
+
+  it('agrega el tiempo de disponibilidad cuando está configurado', () => {
+    process.env.MELI_HANDLING_TIME_DAYS = '5';
+
+    expect(saleTerms()).toContainEqual({
+      id: 'MANUFACTURING_TIME',
+      value_name: '5 días',
+    });
+  });
+
+  it('sin configurar, no inventa un plazo de entrega', () => {
+    // Prometer un plazo que no podemos cumplir es peor que no prometer nada.
+    expect(saleTerms().map((t) => t.id)).not.toContain('MANUFACTURING_TIME');
+  });
+
+  it('publica con retiro en persona', () => {
+    expect(build().shipping.local_pick_up).toBe(true);
+  });
+
+  it('manda tags vacíos solo si se pidió: ausente y vacío no son lo mismo', () => {
+    expect(build().shipping.tags).toBeUndefined();
+
+    process.env.MELI_SHIPPING_TAGS = '';
+    expect(build().shipping.tags).toEqual([]);
   });
 });
