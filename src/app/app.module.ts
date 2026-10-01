@@ -6,6 +6,7 @@ import { HealthController } from './controller/Health.controller';
 import { ProductsCoresaController } from './controller/coresa/Products.controller';
 import { ModalidadesCoresaController } from './controller/coresa/Modalidades.controller';
 import { PublicationsCoresaController } from './controller/coresa/Publications.controller';
+import { SkusCoresaController } from './controller/coresa/Skus.controller';
 import { NestCoresaPublicationRepository } from './drivers/NestCoresaPublicationRepository';
 import { NestCoresaRepository } from './drivers/NestCoresaRepository';
 import { NestExchangeRateRepository } from './drivers/NestExchangeRateRepository';
@@ -23,6 +24,7 @@ import { IMeliPublishRepositoryToken } from '../core/adapters/repositories/IMeli
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories/IProductEnrichmentRepository';
 import { FinancingCosts } from '../core/interactors/coresa/FinancingCosts';
+import { GetCoresaSkuInfo } from '../core/interactors/coresa/GetCoresaSkuInfo';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
 import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { QueryCoresaPublications } from '../core/interactors/coresa/QueryCoresaPublications';
@@ -43,6 +45,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     ProductsCoresaController,
     ModalidadesCoresaController,
     PublicationsCoresaController,
+    SkusCoresaController,
   ],
   providers: [
     {
@@ -78,6 +81,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     SyncCoresaCatalogProcess,
     SyncCoresaProductsToMercadoLibreProcess,
     FinancingCosts,
+    GetCoresaSkuInfo,
     PreviewCoresaPublication,
     PublishCoresaPublication,
     QueryCoresaPublications,
