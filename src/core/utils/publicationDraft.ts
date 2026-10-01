@@ -53,7 +53,7 @@ export function getHandlingTimeDays(): number | null {
   return Number.isFinite(days) && days > 0 ? days : null;
 }
 
-export function saleTerms(): DraftAttribute[] {
+export function saleTerms(campaign?: string | null): DraftAttribute[] {
   const terms: DraftAttribute[] = [
     { id: 'WARRANTY_TYPE', value_name: DEFAULT_WARRANTY_TYPE },
     { id: 'WARRANTY_TIME', value_name: DEFAULT_WARRANTY_TIME },
@@ -65,6 +65,13 @@ export function saleTerms(): DraftAttribute[] {
       id: 'MANUFACTURING_TIME',
       value_name: `${days} días`,
     });
+  }
+
+  // Sin este término la publicación no ofrece las cuotas que cotizamos, y dos
+  // opciones de venta del mismo producto quedan idénticas: ML anula una por
+  // duplicada. El contado es justamente la ausencia del término.
+  if (campaign) {
+    terms.push({ id: 'INSTALLMENTS_CAMPAIGN', value_name: campaign });
   }
   return terms;
 }
@@ -242,7 +249,7 @@ export function buildPublicationDraft(params: {
       ),
       ...packageAttributes(product),
     ],
-    sale_terms: saleTerms(),
+    sale_terms: saleTerms(params.campaign),
     shipping: {
       mode: getShippingMode(),
       free_shipping: getFreeShipping(),

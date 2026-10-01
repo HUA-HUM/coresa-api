@@ -499,7 +499,9 @@ describe('opciones de venta en una misma publicación', () => {
     });
 
     expect(deps.internalApi.getMercadoLibreProductByMla).not.toHaveBeenCalled();
-    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w Neutro');
+    expect(result.draft.title).toBe(
+      'Panel Plafón Cuadrado Macroled 12w Neutro',
+    );
   });
 
   it('si no se puede leer el título de la hermana, publica igual', async () => {
@@ -527,6 +529,8 @@ describe('opciones de venta en una misma publicación', () => {
     });
 
     expect(result.status).toBe('ready');
-    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w Neutro');
+    expect(result.draft.title).toBe(
+      'Panel Plafón Cuadrado Macroled 12w Neutro',
+    );
   });
 });
