@@ -141,9 +141,11 @@ export class PreviewCoresaPublication {
     const categoryAttributes =
       await this.meliPublish.getCategoryAttributes(categoryId);
 
-    const [content, base] = await Promise.all([
+    const [content, base, campaign, familyName] = await Promise.all([
       this.enrichment.buildContent(product, categoryAttributes, variant),
       this.baseFor(sku),
+      this.financingCosts.campaignFor(variant.modalidad),
+      this.familyNameFor(variant, publishedVariants),
     ]);
 
     const draft = buildPublicationDraft({
@@ -156,6 +158,8 @@ export class PreviewCoresaPublication {
         categoryAttributes.map((attribute) => attribute.id),
       ),
       variant,
+      campaign,
+      familyName,
     });
 
     let validation = await this.meliPublish.validateItem(draft);
@@ -211,6 +215,49 @@ export class PreviewCoresaPublication {
       variant,
       publishedVariants,
     };
+  }
+
+  /**
+   * ML agrupa las opciones de venta de un producto por family_name, y
+   * meli-api manda el título como family_name. Así que una variante que
+   * vende la misma cantidad de unidades tiene que salir con el MISMO título
+   * que sus hermanas: si no, en vez de una publicación con varias opciones
+   * de cuotas quedan publicaciones sueltas, y ML anula las que considera
+   * duplicadas.
+   *
+   * Un pack de 6 sí es otro producto y lleva su propio título: por eso la
+   * comparación es por unidades y no solo por SKU.
+   */
+  private async familyNameFor(
+    variant: PublicationVariant,
+    published: CoresaProductInMercadoLibre[],
+  ): Promise<string | undefined> {
+    const hermana = published.find(
+      (row) => row.unitsPerListing === variant.unitsPerListing,
+    );
+    if (!hermana) return undefined;
+
+    try {
+      const snapshot = await this.internalApi.getMercadoLibreProductByMla(
+        hermana.mla,
+      );
+      const titulo = snapshot?.title?.trim();
+      if (titulo) {
+        this.logger.log(
+          `[preview] se reusa el título de ${hermana.mla} para agrupar las opciones de venta`,
+        );
+      }
+      return titulo || undefined;
+    } catch (err) {
+      // Sin el título se publica igual, pero suelta. Se avisa porque es
+      // justo lo que esta función viene a evitar.
+      this.logger.warn(
+        `[preview] no se pudo leer el título de ${hermana.mla}, la variante puede quedar como publicación aparte: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return undefined;
+    }
   }
 
   /**

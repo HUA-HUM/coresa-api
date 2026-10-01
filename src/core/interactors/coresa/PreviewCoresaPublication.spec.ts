@@ -418,3 +418,115 @@ describe('PreviewCoresaPublication', () => {
     expect(deps.coresaRepo.getProductBySku).not.toHaveBeenCalled();
   });
 });
+
+describe('opciones de venta en una misma publicación', () => {
+  it('manda la campaña de cuotas que le dice a ML qué financiación ofrece', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      modalidad: '12_cuotas',
+    });
+
+    // Sin esto la publicación no ofrece las cuotas que cotizamos, y dos
+    // opciones del mismo producto quedan idénticas: ML anula una.
+    expect(result.draft.sale_terms).toContainEqual({
+      id: 'INSTALLMENTS_CAMPAIGN',
+      value_name: '12x_campaign',
+    });
+  });
+
+  it('el contado no lleva campaña', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(result.draft.sale_terms?.map((t) => t.id)).not.toContain(
+      'INSTALLMENTS_CAMPAIGN',
+    );
+  });
+
+  it('reusa el título de la hermana para que ML las agrupe', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([
+      {
+        sku: 'PC12NW',
+        mla: 'MLA333',
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
+    ]);
+    deps.internalApi.getMercadoLibreProductByMla.mockResolvedValue({
+      meli_item_id: 'MLA333',
+      price: 9983,
+      available_quantity: 100,
+      title: 'Panel Plafón Cuadrado Macroled 12w',
+    });
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      modalidad: '12_cuotas',
+    });
+
+    // ML agrupa por family_name, y meli-api manda el título como family_name.
+    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w');
+  });
+
+  it('un pack es otro producto, así que lleva su propio título', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([
+      {
+        sku: 'PC12NW',
+        mla: 'MLA333',
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
+    ]);
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      unitsPerListing: 6,
+    });
+
+    expect(deps.internalApi.getMercadoLibreProductByMla).not.toHaveBeenCalled();
+    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w Neutro');
+  });
+
+  it('si no se puede leer el título de la hermana, publica igual', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([
+      {
+        sku: 'PC12NW',
+        mla: 'MLA333',
+        updatePrice: true,
+        updateStock: true,
+        listingType: 'gold_special',
+        unitsPerListing: 1,
+        modalidad: 'contado',
+        priceFactor: 1,
+        origen: 'publicador',
+      },
+    ]);
+    deps.internalApi.getMercadoLibreProductByMla.mockRejectedValue(
+      new Error('internal-api caído'),
+    );
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      modalidad: '3_cuotas',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w Neutro');
+  });
+});

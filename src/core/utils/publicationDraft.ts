@@ -164,13 +164,21 @@ export function buildPublicationDraft(params: {
   availableQuantity: number;
   allowedAttributeIds: Set<string>;
   variant?: PublicationVariant;
+  /** Cómo llama ML a las cuotas de esta variante. */
+  campaign?: string | null;
+  /**
+   * El título de una publicación hermana del mismo producto. ML agrupa las
+   * opciones de venta por family_name, así que si no es el mismo quedan como
+   * publicaciones separadas en vez de una con varias opciones.
+   */
+  familyName?: string;
 }): PublicationDraft {
   const { product, categoryId, content, price, availableQuantity } = params;
   const variant = params.variant ?? DEFAULT_VARIANT;
 
   return {
     sku: String(product.SKU ?? '').trim(),
-    title: content.title,
+    title: params.familyName?.trim() || content.title,
     category_id: categoryId,
     price,
     available_quantity: availableQuantity,

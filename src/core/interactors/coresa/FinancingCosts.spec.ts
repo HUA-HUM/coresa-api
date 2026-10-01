@@ -132,6 +132,7 @@ describe('mapFinancingCosts', () => {
         etiqueta: '12 cuotas',
         costo: 0.216,
         activa: true,
+        campaign: '12x_campaign',
       },
     ]);
   });
@@ -160,6 +161,7 @@ describe('mapFinancingCosts', () => {
         etiqueta: '3_cuotas',
         costo: 0.089,
         activa: true,
+        campaign: '3x_campaign',
       },
     ]);
   });
@@ -263,5 +265,50 @@ describe('costo y coeficiente', () => {
     await expect(
       costs.update('12_cuotas', { coeficiente: 12.755 }),
     ).rejects.toThrow(/entre 1 y 2/);
+  });
+});
+
+describe('campaña de cuotas', () => {
+  it('traduce la modalidad al vocabulario de ML', async () => {
+    const costs = build(jest.fn().mockResolvedValue([]));
+
+    expect(await costs.campaignFor('12_cuotas')).toBe('12x_campaign');
+    expect(await costs.campaignFor('x3')).toBe('3x_campaign');
+    expect(await costs.campaignFor('cuota_promocionada')).toBe('pcj-co-funded');
+  });
+
+  it('el contado no lleva campaña: es la ausencia del término de venta', async () => {
+    const costs = build(jest.fn().mockResolvedValue([]));
+
+    expect(await costs.campaignFor('contado')).toBeNull();
+    expect(await costs.campaignFor(null)).toBeNull();
+  });
+
+  it('lo que diga internal-api manda sobre el vocabulario del código', async () => {
+    const costs = build(
+      jest.fn().mockResolvedValue([
+        {
+          modalidad: '12_cuotas',
+          etiqueta: '12 cuotas',
+          costo: 0.216,
+          activa: true,
+          campaign: '12x_campaign_v2',
+        },
+      ]),
+    );
+
+    expect(await costs.campaignFor('12_cuotas')).toBe('12x_campaign_v2');
+  });
+
+  it('una modalidad nueva sin campaña cargada no inventa una', async () => {
+    const costs = build(
+      jest
+        .fn()
+        .mockResolvedValue([
+          { modalidad: '18_cuotas', etiqueta: '18', costo: 0.28, activa: true },
+        ]),
+    );
+
+    expect(await costs.campaignFor('18_cuotas')).toBeNull();
   });
 });
