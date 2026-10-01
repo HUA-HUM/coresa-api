@@ -2,8 +2,10 @@ import { MeliCategoryAttribute } from '../entities/MeliCategory';
 import {
   attributesForPrompt,
   missingRequiredAttributes,
+  normalizeNumberUnit,
   productFactsForPrompt,
   sanitizeAttributes,
+  stripExternalLinks,
   truncateTitle,
 } from './enrichment';
 
@@ -147,5 +149,63 @@ describe('enrichment', () => {
 
       expect(missing).toEqual(['MODEL']);
     });
+  });
+});
+
+describe('stripExternalLinks', () => {
+  it('borra la oración con el link, no solo el link', () => {
+    // Quitar la URL sola dejaría "se puede consultar la página oficial en ."
+    const texto =
+      'Atornillador brushless de 20V. Incluye punta y conector.\n\n' +
+      'Para más información, se puede consultar la página oficial del proveedor en https://macroled.com.ar.';
+
+    expect(stripExternalLinks(texto)).toBe(
+      'Atornillador brushless de 20V. Incluye punta y conector.',
+    );
+  });
+
+  it('también saca dominios sueltos, mails y teléfonos', () => {
+    expect(stripExternalLinks('Bueno. Visitá macroled.com.ar hoy.')).toBe(
+      'Bueno.',
+    );
+    expect(stripExternalLinks('Bueno. Escribinos a ventas@soled.com.')).toBe(
+      'Bueno.',
+    );
+    expect(stripExternalLinks('Bueno. Llamanos al +54 11 4567-8900.')).toBe(
+      'Bueno.',
+    );
+  });
+
+  it('no toca una descripción limpia', () => {
+    const texto =
+      'Alicate de corte diagonal de 160 mm.\n\nMango bicolor ergonómico.';
+
+    expect(stripExternalLinks(texto)).toBe(texto);
+  });
+
+  it('no se come un número de modelo con punto', () => {
+    expect(stripExternalLinks('Modelo JDPL3606. Corta hasta 2.5 mm.')).toBe(
+      'Modelo JDPL3606. Corta hasta 2.5 mm.',
+    );
+  });
+});
+
+describe('normalizeNumberUnit', () => {
+  it('acepta la unidad permitida y normaliza el espaciado', () => {
+    expect(normalizeNumberUnit('20W', ['W', 'kW'])).toBe('20 W');
+    expect(normalizeNumberUnit('  160 mm ', ['mm', 'cm'])).toBe('160 mm');
+    expect(normalizeNumberUnit('1,3 kg', ['kg', 'g'])).toBe('1.3 kg');
+  });
+
+  it('descarta una unidad que ML no admite para ese atributo', () => {
+    // Mandarla haría que ML rechace la publicación entera; sin el atributo
+    // opcional, se publica igual.
+    expect(normalizeNumberUnit('20 HP', ['W', 'kW'])).toBeNull();
+  });
+
+  it('completa el número pelado solo si hay una sola unidad posible', () => {
+    expect(normalizeNumberUnit('4200', ['rpm'])).toBe('4200 rpm');
+    // 6,35 puede ser mm o cm: adivinar es un orden de magnitud de diferencia.
+    expect(normalizeNumberUnit('6.35', ['mm', 'cm'])).toBeNull();
   });
 });

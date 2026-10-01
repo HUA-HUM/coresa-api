@@ -10,6 +10,7 @@ import {
 import {
   asText,
   attributesForPrompt,
+  stripExternalLinks,
   describeAttributesForPrompt,
   MELI_TITLE_MAX_LENGTH,
   productFactsForPrompt,
@@ -25,6 +26,7 @@ const SYSTEM_PROMPT = [
   'Escribís en español rioplatense, sin exagerar ni inventar datos.',
   'Usás únicamente la información del producto que te pasan.',
   'Si un dato no está, lo omitís: nunca lo inventás.',
+  'Nunca escribís links, direcciones web, mails ni teléfonos: MercadoLibre da de baja las publicaciones que mandan al comprador afuera.',
   'Respondés siempre con un JSON válido, sin texto alrededor.',
 ].join(' ');
 
@@ -81,9 +83,10 @@ export class APIOpenAIProductEnrichmentRepository {
       '',
       'Reglas:',
       `- "title": máximo ${MELI_TITLE_MAX_LENGTH} caracteres, con el formato producto + marca + modelo o característica principal. Sin mayúsculas sostenidas, sin signos de exclamación, sin precios ni promociones.`,
-      '- "description": texto plano, sin HTML, de 3 a 6 párrafos cortos, con las características técnicas que aparezcan en los datos del producto.',
+      '- "description": texto plano, sin HTML, de 3 a 6 párrafos cortos, con las características técnicas que aparezcan en los datos del producto. Sin links, sin direcciones web, sin mails y sin teléfonos, ni siquiera los del fabricante.',
       '- "model": el modelo o código del fabricante si aparece en los datos; si no, string vacío.',
       '- "attributes": completá los obligatorios que puedas deducir de los datos. Cuando el atributo tenga "valores_permitidos", el value_name debe ser exactamente uno de esos valores. Si no podés deducir un atributo con los datos disponibles, no lo incluyas.',
+      '- Cuando el atributo tenga "unidades_permitidas", el value_name va como "<número> <unidad>" con una de esas unidades exactas, por ejemplo "20 W" o "160 mm". Si el dato del proveedor está en otra unidad, convertilo. Si no podés, no incluyas el atributo.',
       ...this.packRules(variant),
       '',
       'Respondé con este JSON:',
@@ -159,6 +162,7 @@ export class APIOpenAIProductEnrichmentRepository {
       'Reglas:',
       '- Completá TODOS los atributos de la lista. No omitas ninguno.',
       '- Si el atributo tiene "valores_permitidos", el value_name tiene que ser exactamente uno de esos.',
+      '- Cuando el atributo tenga "unidades_permitidas", el value_name va como "<número> <unidad>" con una de esas unidades exactas, por ejemplo "20 W" o "160 mm". Si el dato del proveedor está en otra unidad, convertilo. Si no podés, no incluyas el atributo.',
       '- Usá lo que sepas del tipo de producto y de la marca para elegir el valor más probable, aunque no esté escrito en los datos del proveedor.',
       '- Ante la duda entre varios valores permitidos, elegí el más común para ese tipo de producto.',
       '',
@@ -199,9 +203,9 @@ export class APIOpenAIProductEnrichmentRepository {
     const parsed = this.parseContent(response.data);
 
     const title = truncateTitle(
-      asText(parsed.title) || asText(product.Descripcion),
+      stripExternalLinks(asText(parsed.title) || asText(product.Descripcion)),
     );
-    const description = asText(parsed.description);
+    const description = stripExternalLinks(asText(parsed.description));
     const proposed = Array.isArray(parsed.attributes)
       ? (parsed.attributes as DraftAttribute[])
       : [];
