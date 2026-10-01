@@ -1,4 +1,5 @@
 import { CoresaProduct } from '../../entities/CoresaProduct';
+import { FinancingCosts } from './FinancingCosts';
 import { PreviewCoresaPublication } from './PreviewCoresaPublication';
 
 const product: CoresaProduct = {
@@ -77,6 +78,9 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
       Disponible: 100,
     }),
     listVariantsBySku: jest.fn().mockResolvedValue([]),
+    listFinancingCosts: jest.fn().mockResolvedValue([]),
+    updateFinancingCost: jest.fn(),
+    createFinancingCost: jest.fn(),
     getMercadoLibreProductByMla: jest.fn(),
     upsertProductInMercadoLibre: jest.fn(),
     startProcessRun: jest.fn(),
@@ -95,12 +99,15 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
 }
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
+  // Sin tabla en internal-api, FinancingCosts cae a los valores compilados:
+  // es el mismo camino que sigue producción si internal-api no contesta.
   return new PreviewCoresaPublication(
     deps.coresaRepo,
     deps.meliPublish as never,
     deps.enrichment,
     deps.publications as never,
     deps.internalApi,
+    new FinancingCosts(deps.internalApi),
   );
 }
 

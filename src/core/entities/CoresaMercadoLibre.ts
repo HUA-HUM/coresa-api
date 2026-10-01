@@ -100,6 +100,10 @@ export type CoresaSyncChange = {
   errorMessage?: string | null;
 };
 
+export function unwrapOne(payload: unknown): Record<string, unknown> | null {
+  return unwrapObject(payload);
+}
+
 function unwrapObject(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;

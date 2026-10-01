@@ -2,6 +2,13 @@ import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { CoresaProduct } from '../../../entities/CoresaProduct';
 import {
+  FinancingCost,
+  FinancingCostChanges,
+  mapFinancingCost,
+  mapFinancingCosts,
+  NewFinancingCost,
+} from '../../../entities/FinancingCost';
+import {
   CoresaListingVariantInput,
   CoresaProductInMercadoLibre,
   CoresaSyncChange,
@@ -11,6 +18,7 @@ import {
   mapCoresaProductsInMercadoLibre,
   mapMercadoLibreProductSnapshot,
   unwrapList,
+  unwrapOne,
 } from '../../../entities/CoresaMercadoLibre';
 
 export class APIInternalApiRepository {
@@ -99,6 +107,7 @@ export class APIInternalApiRepository {
     path: string,
     query: Record<string, string | number> = {},
     data?: unknown,
+    method?: 'GET' | 'POST' | 'PATCH',
   ): AxiosRequestConfig {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -111,7 +120,7 @@ export class APIInternalApiRepository {
     }
 
     const config: AxiosRequestConfig = {
-      method: data !== undefined ? 'POST' : 'GET',
+      method: method ?? (data !== undefined ? 'POST' : 'GET'),
       url: `${this.apiUrl.replace(/\/$/, '')}${path}`,
       headers,
       params: query,
@@ -352,6 +361,52 @@ export class APIInternalApiRepository {
    * Deja el SKU vinculado a la publicación para que el actualizador le
    * mantenga precio y stock. Es un upsert por (sku, mla).
    */
+  async listFinancingCosts(): Promise<FinancingCost[]> {
+    const payload = await this.getOrNull(
+      '/internal/meli/financing-costs',
+      'costos de financiación',
+    );
+    if (payload === null) return [];
+    return mapFinancingCosts(payload);
+  }
+
+  async updateFinancingCost(
+    modalidad: string,
+    changes: FinancingCostChanges,
+  ): Promise<FinancingCost | null> {
+    const encoded = encodeURIComponent(modalidad);
+    const config = this.prepareRequest(
+      `/internal/meli/financing-costs/${encoded}`,
+      {},
+      changes,
+      'PATCH',
+    );
+    const response = await this.request(config);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `[internal-api] editar ${modalidad} -> ${response.status}: ${JSON.stringify(response.data)}`,
+      );
+    }
+    return mapFinancingCost(unwrapOne(response.data));
+  }
+
+  async createFinancingCost(
+    cost: NewFinancingCost,
+  ): Promise<FinancingCost | null> {
+    const config = this.prepareRequest(
+      '/internal/meli/financing-costs',
+      {},
+      cost,
+    );
+    const response = await this.request(config);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `[internal-api] crear ${cost.modalidad} -> ${response.status}: ${JSON.stringify(response.data)}`,
+      );
+    }
+    return mapFinancingCost(unwrapOne(response.data));
+  }
+
   async listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]> {
     const encoded = encodeURIComponent(sku);
     const payload = await this.getOrNull(

@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './controller/Health.controller';
 import { ProductsCoresaController } from './controller/coresa/Products.controller';
+import { ModalidadesCoresaController } from './controller/coresa/Modalidades.controller';
 import { PublicationsCoresaController } from './controller/coresa/Publications.controller';
 import { NestCoresaPublicationRepository } from './drivers/NestCoresaPublicationRepository';
 import { NestCoresaRepository } from './drivers/NestCoresaRepository';
@@ -21,6 +22,7 @@ import { IInternalApiRepositoryToken } from '../core/adapters/repositories/IInte
 import { IMeliPublishRepositoryToken } from '../core/adapters/repositories/IMeliPublishRepository';
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories/IProductEnrichmentRepository';
+import { FinancingCosts } from '../core/interactors/coresa/FinancingCosts';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
 import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { QueryCoresaPublications } from '../core/interactors/coresa/QueryCoresaPublications';
@@ -39,6 +41,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
   controllers: [
     HealthController,
     ProductsCoresaController,
+    ModalidadesCoresaController,
     PublicationsCoresaController,
   ],
   providers: [
@@ -74,6 +77,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     SyncCoresaProductsToMercadoLibreApi,
     SyncCoresaCatalogProcess,
     SyncCoresaProductsToMercadoLibreProcess,
+    FinancingCosts,
     PreviewCoresaPublication,
     PublishCoresaPublication,
     QueryCoresaPublications,

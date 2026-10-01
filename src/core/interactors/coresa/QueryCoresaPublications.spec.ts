@@ -41,7 +41,7 @@ function buildDeps() {
 }
 
 function buildInteractor(deps: ReturnType<typeof buildDeps>) {
-  return new QueryCoresaPublications(deps as never);
+  return new QueryCoresaPublications(deps);
 }
 
 describe('QueryCoresaPublications', () => {
