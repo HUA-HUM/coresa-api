@@ -9,6 +9,7 @@ import {
   IInternalApiRepositoryToken,
 } from '../../adapters/repositories/IInternalApiRepository';
 import {
+  CAMPAIGN_BY_MODALIDAD,
   factorToCost,
   FinancingCost,
   FinancingCostChanges,
@@ -29,6 +30,7 @@ export const FALLBACK_COSTS: FinancingCost[] = Object.entries(
   etiqueta: modalidad,
   costo,
   activa: true,
+  campaign: CAMPAIGN_BY_MODALIDAD[modalidad] ?? null,
 }));
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
@@ -84,6 +86,18 @@ export class FinancingCosts {
   /** Solo las que se ofrecen hoy, para el desplegable del panel. */
   async listActive(): Promise<FinancingCost[]> {
     return (await this.list()).filter((cost) => cost.activa);
+  }
+
+  /**
+   * El nombre con el que ML conoce esa financiación. null es contado: sin
+   * campaña, que es la ausencia del término de venta.
+   */
+  async campaignFor(
+    modalidad: string | null | undefined,
+  ): Promise<string | null> {
+    const buscada = canonicalModalidad(modalidad);
+    const cost = (await this.list()).find((item) => item.modalidad === buscada);
+    return cost?.campaign ?? CAMPAIGN_BY_MODALIDAD[buscada] ?? null;
   }
 
   /**

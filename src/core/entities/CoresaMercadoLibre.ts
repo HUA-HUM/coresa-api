@@ -38,6 +38,8 @@ export type MercadoLibreProductSnapshot = {
   meli_item_id: string;
   price: number;
   available_quantity: number;
+  /** El family_name con el que ML agrupa las opciones de venta. */
+  title?: string;
 };
 
 export type MeliListingUpdate = {
@@ -222,5 +224,6 @@ export function mapMercadoLibreProductSnapshot(
     available_quantity: toNumber(
       nested.available_quantity ?? nested.availableQuantity ?? nested.stock,
     ),
+    title: scalarToString(nested.title).trim() || undefined,
   };
 }
