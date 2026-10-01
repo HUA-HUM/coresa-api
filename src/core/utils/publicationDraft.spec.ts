@@ -3,7 +3,9 @@ import {
   buildPublicationDraft,
   getGtin,
   isValidGtin,
+  packageAttributes,
   packageDimension,
+  packagedSize,
   packageWeight,
   saleTerms,
   valueAddedTax,
@@ -348,5 +350,64 @@ describe('términos de venta y envío', () => {
 
     process.env.MELI_SHIPPING_TAGS = '';
     expect(build().shipping.tags).toEqual([]);
+  });
+});
+
+describe('paquete de un pack', () => {
+  // El set de cuchillas: 40 g y 10x3x2 cm la unidad.
+  const cuchillas = {
+    SKU: 'JDMK1K61',
+    Alto_cm: 10,
+    Ancho_cm: 3,
+    Largo_cm: 2,
+    Peso_kg: 0.04,
+  } as CoresaProduct;
+
+  it('multiplica el peso por las unidades que van en la caja', () => {
+    // Declarar 40 g donde van 800 g es pagar de menos un envío que igual hay
+    // que despachar: ML cobra por este dato.
+    expect(packagedSize(cuchillas, 20).kg).toBeCloseTo(0.8, 6);
+    expect(packagedSize(cuchillas, 1).kg).toBeCloseTo(0.04, 6);
+  });
+
+  it('apila sobre el lado más chico, que es como se arma la caja', () => {
+    const veinte = packagedSize(cuchillas, 20);
+
+    expect(veinte.alto).toBe(10);
+    expect(veinte.ancho).toBe(3);
+    expect(veinte.largo).toBe(40);
+  });
+
+  it('una unidad suelta queda igual que antes', () => {
+    expect(packagedSize(cuchillas, 1)).toEqual({
+      alto: 10,
+      ancho: 3,
+      largo: 2,
+      kg: 0.04,
+    });
+  });
+
+  it('estira un solo lado aunque los tres midan lo mismo', () => {
+    const cubo = {
+      Alto_cm: 5,
+      Ancho_cm: 5,
+      Largo_cm: 5,
+      Peso_kg: 1,
+    } as CoresaProduct;
+
+    const seis = packagedSize(cubo, 6);
+
+    expect([seis.alto, seis.ancho, seis.largo].sort((a, b) => a - b)).toEqual([
+      5, 5, 30,
+    ]);
+  });
+
+  it('lo que llega a ML son enteros en cm y g', () => {
+    expect(packageAttributes(cuchillas, 20)).toEqual([
+      { id: 'SELLER_PACKAGE_HEIGHT', value_name: '10 cm' },
+      { id: 'SELLER_PACKAGE_WIDTH', value_name: '3 cm' },
+      { id: 'SELLER_PACKAGE_LENGTH', value_name: '40 cm' },
+      { id: 'SELLER_PACKAGE_WEIGHT', value_name: '800 g' },
+    ]);
   });
 });
