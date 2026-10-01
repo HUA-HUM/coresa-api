@@ -26,7 +26,10 @@ import {
   IProductEnrichmentRepository,
   IProductEnrichmentRepositoryToken,
 } from '../../adapters/repositories/IProductEnrichmentRepository';
-import { CoresaPublication } from '../../entities/CoresaPublication';
+import {
+  CoresaPublication,
+  CoresaPublicationStatus,
+} from '../../entities/CoresaPublication';
 import { CoresaProduct } from '../../entities/CoresaProduct';
 import {
   MeliCategoryAttribute,
@@ -458,8 +461,13 @@ export class PreviewCoresaPublication {
       aiGeneratedAt: new Date().toISOString(),
     });
 
+    // Mismo motivo que en la edición del borrador: internal-api rechaza una
+    // transición hacia el estado que la publicación ya tiene, y al reusar un
+    // registro de un preview anterior es justo lo que pasaba.
+    const status: CoresaPublicationStatus = params.isValid ? 'ready' : 'draft';
+
     return this.publications.update(created.id, {
-      status: params.isValid ? 'ready' : 'draft',
+      ...(status === created.status ? {} : { status }),
       validation: params.validation,
     });
   }

@@ -68,8 +68,10 @@ describe('APICoresaPublicationRepository', () => {
       expect.objectContaining({
         method: 'PATCH',
         url: 'https://internal.test/internal/coresa/publications/4',
+        // Sin status: internal-api rechaza una transición hacia el estado
+        // que la publicación ya tiene, y acá no sabemos cuál es. Lo define
+        // el que llama, después de validar contra ML.
         data: {
-          status: 'draft',
           draft,
           categoryId: 'MLA1591',
           errorCode: null,

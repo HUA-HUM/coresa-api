@@ -90,8 +90,11 @@ export class UpdateCoresaPublicationDraft {
 
     const missing = await this.missingFor(draft);
 
+    // internal-api valida las transiciones de estado y rechaza ready -> ready.
+    // Tiene razón: pedir el estado que la publicación ya tiene no es un
+    // cambio. Se manda solo cuando de verdad cambió.
     await this.publications.update(input.publicationId, {
-      status,
+      ...(status === publication.status ? {} : { status }),
       draft,
       categoryId: draft.category_id,
       validation,
