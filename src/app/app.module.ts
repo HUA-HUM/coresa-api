@@ -7,6 +7,7 @@ import { ProductsCoresaController } from './controller/coresa/Products.controlle
 import { ModalidadesCoresaController } from './controller/coresa/Modalidades.controller';
 import { PublicationsCoresaController } from './controller/coresa/Publications.controller';
 import { SkusCoresaController } from './controller/coresa/Skus.controller';
+import { NestCdnImagesRepository } from './drivers/NestCdnImagesRepository';
 import { NestCoresaPublicationRepository } from './drivers/NestCoresaPublicationRepository';
 import { NestCoresaRepository } from './drivers/NestCoresaRepository';
 import { NestExchangeRateRepository } from './drivers/NestExchangeRateRepository';
@@ -23,6 +24,7 @@ import { IInternalApiRepositoryToken } from '../core/adapters/repositories/IInte
 import { IMeliPublishRepositoryToken } from '../core/adapters/repositories/IMeliPublishRepository';
 import { IMercadoLibreRepositoryToken } from '../core/adapters/repositories/IMercadoLibreRepository';
 import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories/IProductEnrichmentRepository';
+import { IProductImageRepositoryToken } from '../core/adapters/repositories/IProductImageRepository';
 import { FinancingCosts } from '../core/interactors/coresa/FinancingCosts';
 import { GetCoresaSkuInfo } from '../core/interactors/coresa/GetCoresaSkuInfo';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
@@ -67,6 +69,10 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     {
       provide: IMeliPublishRepositoryToken,
       useClass: NestMeliPublishRepository,
+    },
+    {
+      provide: IProductImageRepositoryToken,
+      useClass: NestCdnImagesRepository,
     },
     {
       provide: IProductEnrichmentRepositoryToken,

@@ -27,6 +27,10 @@ import {
   IProductEnrichmentRepositoryToken,
 } from '../../adapters/repositories/IProductEnrichmentRepository';
 import {
+  IProductImageRepository,
+  IProductImageRepositoryToken,
+} from '../../adapters/repositories/IProductImageRepository';
+import {
   CoresaPublication,
   CoresaPublicationStatus,
 } from '../../entities/CoresaPublication';
@@ -56,7 +60,10 @@ import {
 import { toNumber } from '../../utils/coresaPriceStock';
 import { FinancingCosts } from './FinancingCosts';
 import { missingRequiredAttributes } from '../../utils/enrichment';
-import { buildPublicationDraft } from '../../utils/publicationDraft';
+import {
+  buildPictures,
+  buildPublicationDraft,
+} from '../../utils/publicationDraft';
 
 export class PreviewCoresaPublicationInput {
   sku: string;
@@ -102,6 +109,8 @@ export class PreviewCoresaPublication {
     @Inject(IInternalApiRepositoryToken)
     private readonly internalApi: IInternalApiRepository,
     private readonly financingCosts: FinancingCosts,
+    @Inject(IProductImageRepositoryToken)
+    private readonly images: IProductImageRepository,
   ) {}
 
   /** Permite trabajar en local mientras internal-api todavía no tiene la tabla. */
@@ -144,11 +153,12 @@ export class PreviewCoresaPublication {
     const categoryAttributes =
       await this.meliPublish.getCategoryAttributes(categoryId);
 
-    const [content, base, campaign, familyName] = await Promise.all([
+    const [content, base, campaign, familyName, pictures] = await Promise.all([
       this.enrichment.buildContent(product, categoryAttributes, variant),
       this.baseFor(sku),
       this.financingCosts.campaignFor(variant.modalidad),
       this.familyNameFor(variant, publishedVariants),
+      this.images.prepareForMercadoLibre(sku, buildPictures(product)),
     ]);
 
     const draft = buildPublicationDraft({
@@ -163,6 +173,7 @@ export class PreviewCoresaPublication {
       variant,
       campaign,
       familyName,
+      pictures,
     });
 
     let validation = await this.meliPublish.validateItem(draft);
