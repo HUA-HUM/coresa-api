@@ -61,12 +61,16 @@ export function packageDimension(value: unknown): string {
   return cm > 0 ? `${cm} cm` : '';
 }
 
-/** Peso del paquete: gramos abajo del kilo, que es como lo espera ML. */
+/**
+ * Peso del paquete, siempre en gramos enteros. ML es terminante con esto:
+ * "Only integers are accepted for dimensions and weight, with centimeters
+ * 'cm' as the unit for dimensions and grams 'g' as the unit for weight".
+ * Mandar "1.3 kg" hace que rechace la publicación entera.
+ */
 export function packageWeight(value: unknown): string {
   const kg = toNumber(value);
   if (!(kg > 0)) return '';
-  if (kg < 1) return `${Math.max(1, Math.round(kg * 1000))} g`;
-  return `${kg} kg`;
+  return `${Math.max(1, Math.round(kg * 1000))} g`;
 }
 
 /**

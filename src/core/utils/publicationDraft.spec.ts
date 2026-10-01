@@ -3,6 +3,8 @@ import {
   buildPublicationDraft,
   getGtin,
   isValidGtin,
+  packageDimension,
+  packageWeight,
   valueAddedTax,
 } from './publicationDraft';
 
@@ -278,5 +280,23 @@ describe('atributos de paquete e impuestos', () => {
     });
 
     expect(draft.attributes.map((a) => a.id)).not.toContain('GTIN');
+  });
+});
+
+describe('packageWeight', () => {
+  it('siempre manda gramos enteros', () => {
+    // ML: "Only integers are accepted for dimensions and weight, with
+    // centimeters 'cm' for dimensions and grams 'g' for weight". Un "1.3 kg"
+    // hace que rechace la publicación entera.
+    expect(packageWeight(1.3)).toBe('1300 g');
+    expect(packageWeight(0.21)).toBe('210 g');
+    expect(packageWeight(12)).toBe('12000 g');
+    expect(packageWeight(0.0001)).toBe('1 g');
+    expect(packageWeight(0)).toBe('');
+  });
+
+  it('las dimensiones van en cm enteros', () => {
+    expect(packageDimension(22.4)).toBe('23 cm');
+    expect(packageDimension(0)).toBe('');
   });
 });
