@@ -140,24 +140,63 @@ export function valueAddedTax(product: CoresaProduct): string {
 }
 
 /**
+ * El paquete de una publicación que vende varias unidades es el de TODAS, no
+ * el de una. Coresa manda peso y medidas por unidad, y ML cobra el envío por
+ * este dato: declarar 40 g donde van 800 g es pagar de menos un envío que
+ * igual hay que despachar.
+ *
+ * El peso se multiplica, que es exacto. Las medidas se estiman apilando sobre
+ * el lado más chico, que es como se arma una caja de verdad; es un estimado y
+ * el usuario lo puede corregir en el borrador antes de publicar.
+ */
+export function packagedSize(
+  product: CoresaProduct,
+  unitsPerListing: number,
+): { alto: number; ancho: number; largo: number; kg: number } {
+  const alto = toNumber(product.Alto_cm);
+  const ancho = toNumber(product.Ancho_cm);
+  const largo = toNumber(product.Largo_cm);
+  const kg = toNumber(product.Peso_kg) * Math.max(1, unitsPerListing);
+
+  if (unitsPerListing <= 1) return { alto, ancho, largo, kg };
+
+  const menor = Math.min(alto, ancho, largo);
+  const apilar = (lado: number): number =>
+    lado === menor ? lado * unitsPerListing : lado;
+
+  // Solo se estira un lado: si los tres son iguales, el primero.
+  let yaApilado = false;
+  const estirar = (lado: number): number => {
+    if (yaApilado || lado !== menor) return lado;
+    yaApilado = true;
+    return apilar(lado);
+  };
+
+  return {
+    alto: estirar(alto),
+    ancho: estirar(ancho),
+    largo: estirar(largo),
+    kg,
+  };
+}
+
+/**
  * ML pide los cuatro datos del paquete juntos, aunque no aparezcan en los
  * atributos de la categoría, así que van siempre.
  */
-export function packageAttributes(product: CoresaProduct): DraftAttribute[] {
+export function packageAttributes(
+  product: CoresaProduct,
+  unitsPerListing: number = 1,
+): DraftAttribute[] {
+  const paquete = packagedSize(product, unitsPerListing);
   const values: DraftAttribute[] = [
-    {
-      id: 'SELLER_PACKAGE_HEIGHT',
-      value_name: packageDimension(product.Alto_cm),
-    },
-    {
-      id: 'SELLER_PACKAGE_WIDTH',
-      value_name: packageDimension(product.Ancho_cm),
-    },
+    { id: 'SELLER_PACKAGE_HEIGHT', value_name: packageDimension(paquete.alto) },
+    { id: 'SELLER_PACKAGE_WIDTH', value_name: packageDimension(paquete.ancho) },
     {
       id: 'SELLER_PACKAGE_LENGTH',
-      value_name: packageDimension(product.Largo_cm),
+      value_name: packageDimension(paquete.largo),
     },
-    { id: 'SELLER_PACKAGE_WEIGHT', value_name: packageWeight(product.Peso_kg) },
+    { id: 'SELLER_PACKAGE_WEIGHT', value_name: packageWeight(paquete.kg) },
   ];
 
   // Si falta alguno, ML rechaza igual: o van los cuatro, o no va ninguno.
@@ -247,7 +286,7 @@ export function buildPublicationDraft(params: {
         params.allowedAttributeIds,
         variant.unitsPerListing,
       ),
-      ...packageAttributes(product),
+      ...packageAttributes(product, variant.unitsPerListing),
     ],
     sale_terms: saleTerms(params.campaign),
     shipping: {
