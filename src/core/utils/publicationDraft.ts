@@ -8,7 +8,7 @@ import {
 import { toNumber } from './coresaPriceStock';
 
 export const DEFAULT_WARRANTY_TYPE = 'Garantía del vendedor';
-export const DEFAULT_WARRANTY_TIME = '6 meses';
+export const DEFAULT_WARRANTY_TIME = '12 meses';
 export const MAX_PICTURES = 10;
 /** Producto nacionalizado por el proveedor: el comprador no paga aduana. */
 export const DEFAULT_IMPORT_DUTY = '0 %';
@@ -19,6 +19,54 @@ export function getShippingMode(): string {
 
 export function getFreeShipping(): boolean {
   return String(process.env.MELI_FREE_SHIPPING ?? 'false').trim() === 'true';
+}
+
+/** Retiro en persona por el domicilio del vendedor. */
+export function getLocalPickUp(): boolean {
+  return String(process.env.MELI_LOCAL_PICK_UP ?? 'true').trim() === 'true';
+}
+
+/**
+ * Con Flex activo ML no deja editar el tiempo de disponibilidad del producto,
+ * y Coresa vende bajo demanda: la mercadería no está en nuestro depósito.
+ * La lista vacía es pedirle a ML que no lo active; no mandar el campo deja
+ * decidir a la configuración de la cuenta.
+ */
+export function getShippingTags(): string[] | undefined {
+  const raw = process.env.MELI_SHIPPING_TAGS;
+  if (raw === undefined) return undefined;
+  return raw
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== '');
+}
+
+/**
+ * Días que tardamos en tener el producto listo para despachar. ML lo pide
+ * como término de venta MANUFACTURING_TIME. Si no está configurado no se
+ * manda: un valor inventado acá promete una entrega que no podemos cumplir.
+ */
+export function getHandlingTimeDays(): number | null {
+  const raw = process.env.MELI_HANDLING_TIME_DAYS;
+  if (raw === undefined || String(raw).trim() === '') return null;
+  const days = Math.floor(Number(raw));
+  return Number.isFinite(days) && days > 0 ? days : null;
+}
+
+export function saleTerms(): DraftAttribute[] {
+  const terms: DraftAttribute[] = [
+    { id: 'WARRANTY_TYPE', value_name: DEFAULT_WARRANTY_TYPE },
+    { id: 'WARRANTY_TIME', value_name: DEFAULT_WARRANTY_TIME },
+  ];
+
+  const days = getHandlingTimeDays();
+  if (days !== null) {
+    terms.push({
+      id: 'MANUFACTURING_TIME',
+      value_name: `${days} días`,
+    });
+  }
+  return terms;
 }
 
 /**
@@ -186,13 +234,12 @@ export function buildPublicationDraft(params: {
       ),
       ...packageAttributes(product),
     ],
-    sale_terms: [
-      { id: 'WARRANTY_TYPE', value_name: DEFAULT_WARRANTY_TYPE },
-      { id: 'WARRANTY_TIME', value_name: DEFAULT_WARRANTY_TIME },
-    ],
+    sale_terms: saleTerms(),
     shipping: {
       mode: getShippingMode(),
       free_shipping: getFreeShipping(),
+      local_pick_up: getLocalPickUp(),
+      ...(getShippingTags() === undefined ? {} : { tags: getShippingTags() }),
     },
     description: content.description,
     listing_types: [variant.listingType],

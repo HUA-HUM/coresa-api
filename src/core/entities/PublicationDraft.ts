@@ -9,6 +9,14 @@ export class DraftAttribute {
 export class DraftShipping {
   mode: string;
   free_shipping: boolean;
+  /** Retiro en persona por el domicilio del vendedor. */
+  local_pick_up?: boolean;
+  /**
+   * Tags de envío de ML. La lista vacía pide que NO active Flex: con Flex
+   * prendido ML no deja editar el tiempo de disponibilidad del producto.
+   */
+  tags?: string[];
+  logistic_type?: string;
 }
 
 /**
