@@ -184,3 +184,46 @@ describe('UpdateCoresaPublicationDraft', () => {
     ).rejects.toThrow(/no existe/);
   });
 });
+
+describe('UpdateCoresaPublicationDraft, estado', () => {
+  it('no pide el estado que la publicación ya tiene', async () => {
+    // internal-api valida las transiciones y rechaza ready -> ready con un
+    // 409. Editar el título de un borrador ya validado caía justo ahí.
+    const deps = buildDeps('ready');
+
+    await buildInteractor(deps).execute({
+      publicationId: 4,
+      draft: { title: 'Otro título' },
+    });
+
+    const [, cambios] = deps.publications.update.mock.calls[0] as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(cambios).not.toHaveProperty('status');
+    expect(cambios.draft).toEqual({ ...draft, title: 'Otro título' });
+  });
+
+  it('sí lo pide cuando ML cambia de opinión', async () => {
+    const deps = buildDeps('ready');
+    deps.meliPublish.validateItem.mockResolvedValue({
+      sku: 'AEB 35 SC/1',
+      results: {
+        gold_special: {
+          valid: false,
+          error: { cause: [{ message: 'falta MATERIAL' }] },
+        },
+      },
+    });
+
+    await buildInteractor(deps).execute({
+      publicationId: 4,
+      draft: { title: 'Otro título' },
+    });
+
+    expect(deps.publications.update).toHaveBeenCalledWith(
+      4,
+      expect.objectContaining({ status: 'draft' }),
+    );
+  });
+});

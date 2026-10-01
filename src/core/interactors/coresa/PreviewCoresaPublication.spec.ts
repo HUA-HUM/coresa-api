@@ -158,9 +158,32 @@ describe('PreviewCoresaPublication', () => {
 
     await buildInteractor(deps).execute({ sku: 'PC12NW' });
 
+    // La publicación ya estaba en draft, así que no se pide el estado de
+    // nuevo: internal-api rechaza draft -> draft como transición inválida.
+    const [, cambios] = deps.publications.update.mock.calls[0] as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(cambios).not.toHaveProperty('status');
+    expect(cambios.validation).toEqual(
+      expect.objectContaining({ sku: 'PC12NW' }),
+    );
+  });
+
+  it('pide el estado nuevo solo cuando de verdad cambió', async () => {
+    const deps = buildDeps();
+    deps.publications.create.mockResolvedValue({
+      id: 7,
+      sku: 'PC12NW',
+      status: 'draft',
+    });
+
+    await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    // ML lo validó, así que draft -> ready sí es un cambio real.
     expect(deps.publications.update).toHaveBeenCalledWith(
       7,
-      expect.objectContaining({ status: 'draft' }),
+      expect.objectContaining({ status: 'ready' }),
     );
   });
 

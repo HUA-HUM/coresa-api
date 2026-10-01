@@ -74,8 +74,11 @@ export class APICoresaPublicationRepository {
 
       // La categoría va sí o sí: si no, la fila queda con la del primer
       // preview y no coincide con la del borrador que se va a publicar.
+      //
+      // El estado NO va: internal-api rechaza una transición hacia el estado
+      // que la publicación ya tiene, y acá no sabemos cuál es. Lo define el
+      // que llama, después de validar contra ML.
       return this.update(existingId, {
-        status: 'draft',
         draft: input.draft,
         categoryId: input.categoryId ?? input.draft?.category_id ?? null,
         errorCode: null,
