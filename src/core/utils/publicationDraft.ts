@@ -53,7 +53,7 @@ export function getHandlingTimeDays(): number | null {
   return Number.isFinite(days) && days > 0 ? days : null;
 }
 
-export function saleTerms(campaign?: string | null): DraftAttribute[] {
+export function saleTerms(): DraftAttribute[] {
   const terms: DraftAttribute[] = [
     { id: 'WARRANTY_TYPE', value_name: DEFAULT_WARRANTY_TYPE },
     { id: 'WARRANTY_TIME', value_name: DEFAULT_WARRANTY_TIME },
@@ -67,12 +67,17 @@ export function saleTerms(campaign?: string | null): DraftAttribute[] {
     });
   }
 
-  // Sin este término la publicación no ofrece las cuotas que cotizamos, y dos
-  // opciones de venta del mismo producto quedan idénticas: ML anula una por
-  // duplicada. El contado es justamente la ausencia del término.
-  if (campaign) {
-    terms.push({ id: 'INSTALLMENTS_CAMPAIGN', value_name: campaign });
-  }
+  // INSTALLMENTS_CAMPAIGN NO se manda. Se ve en las publicaciones que ya
+  // existen y parece un término de venta más, pero es de solo lectura: lo
+  // escribe ML cuando la publicación entra en una campaña de cuotas. Mandarlo
+  // hace que ML rechace la publicación entera:
+  //
+  //   sale_term.not_allowed — Not allowed to modify sale term
+  //   INSTALLMENTS_CAMPAIGN
+  //
+  // La modalidad sigue definiendo el precio, que es para lo que sirve de este
+  // lado. Que la publicación ofrezca esas cuotas se resuelve entrando a la
+  // campaña, no al publicar.
   return terms;
 }
 
@@ -258,8 +263,6 @@ export function buildPublicationDraft(params: {
   availableQuantity: number;
   allowedAttributeIds: Set<string>;
   variant?: PublicationVariant;
-  /** Cómo llama ML a las cuotas de esta variante. */
-  campaign?: string | null;
   /** Fotos ya pasadas por el CDN. Sin esto, las del proveedor. */
   pictures?: string[];
   /**
@@ -292,7 +295,7 @@ export function buildPublicationDraft(params: {
       ),
       ...packageAttributes(product, variant.unitsPerListing),
     ],
-    sale_terms: saleTerms(params.campaign),
+    sale_terms: saleTerms(),
     shipping: {
       mode: getShippingMode(),
       free_shipping: getFreeShipping(),

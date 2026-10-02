@@ -459,7 +459,26 @@ describe('PreviewCoresaPublication', () => {
 });
 
 describe('opciones de venta en una misma publicación', () => {
-  it('manda la campaña de cuotas que le dice a ML qué financiación ofrece', async () => {
+  it('nunca manda INSTALLMENTS_CAMPAIGN: ML no deja escribirlo', async () => {
+    const deps = buildDeps();
+
+    // "Not allowed to modify sale term INSTALLMENTS_CAMPAIGN": lo escribe ML
+    // cuando la publicación entra en una campaña, y mandarlo rechaza la
+    // publicación entera. Con cuotas no se podía publicar nada.
+    const conCuotas = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      modalidad: '12_cuotas',
+    });
+    const contado = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    for (const result of [conCuotas, contado]) {
+      expect(result.draft.sale_terms?.map((t) => t.id)).not.toContain(
+        'INSTALLMENTS_CAMPAIGN',
+      );
+    }
+  });
+
+  it('la modalidad sigue definiendo el precio', async () => {
     const deps = buildDeps();
 
     const result = await buildInteractor(deps).execute({
@@ -467,22 +486,8 @@ describe('opciones de venta en una misma publicación', () => {
       modalidad: '12_cuotas',
     });
 
-    // Sin esto la publicación no ofrece las cuotas que cotizamos, y dos
-    // opciones del mismo producto quedan idénticas: ML anula una.
-    expect(result.draft.sale_terms).toContainEqual({
-      id: 'INSTALLMENTS_CAMPAIGN',
-      value_name: '12x_campaign',
-    });
-  });
-
-  it('el contado no lleva campaña', async () => {
-    const deps = buildDeps();
-
-    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
-
-    expect(result.draft.sale_terms?.map((t) => t.id)).not.toContain(
-      'INSTALLMENTS_CAMPAIGN',
-    );
+    expect(result.draft.price).toBe(12733);
+    expect(result.variant.modalidad).toBe('12_cuotas');
   });
 
   it('reusa el título de la hermana para que ML las agrupe', async () => {
