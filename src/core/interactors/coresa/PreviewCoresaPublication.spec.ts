@@ -88,10 +88,20 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
     recordSyncChanges: jest.fn(),
   };
 
+  const images = {
+    // El CDN devuelve la foto redimensionada; sin él, la del proveedor.
+    prepareForMercadoLibre: jest
+      .fn()
+      .mockImplementation((_sku: string, urls: string[]) =>
+        Promise.resolve(urls),
+      ),
+  };
+
   return {
     coresaRepo,
     meliPublish,
     enrichment,
+    images,
     publications,
     internalApi,
     ...overrides,
@@ -108,6 +118,7 @@ function buildInteractor(deps: ReturnType<typeof buildDeps>) {
     deps.publications as never,
     deps.internalApi,
     new FinancingCosts(deps.internalApi),
+    deps.images,
   );
 }
 

@@ -260,6 +260,8 @@ export function buildPublicationDraft(params: {
   variant?: PublicationVariant;
   /** Cómo llama ML a las cuotas de esta variante. */
   campaign?: string | null;
+  /** Fotos ya pasadas por el CDN. Sin esto, las del proveedor. */
+  pictures?: string[];
   /**
    * El título de una publicación hermana del mismo producto. ML agrupa las
    * opciones de venta por family_name, así que si no es el mismo quedan como
@@ -277,7 +279,9 @@ export function buildPublicationDraft(params: {
     price,
     available_quantity: availableQuantity,
     condition: 'new',
-    pictures: buildPictures(product),
+    pictures: params.pictures?.length
+      ? params.pictures
+      : buildPictures(product),
     attributes: [
       ...withProductAttributes(
         content.attributes,
