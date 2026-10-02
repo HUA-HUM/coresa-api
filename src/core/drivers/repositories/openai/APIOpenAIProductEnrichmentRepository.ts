@@ -190,6 +190,38 @@ export class APIOpenAIProductEnrichmentRepository {
     return sanitizeAttributes(proposed, missing);
   }
 
+  /**
+   * El predictor de ML elige la categoría a partir de un texto. La
+   * descripción de Coresa es mala para eso: viene en mayúsculas, corrida y
+   * sin decir para qué sirve el producto. Esta pasada arma la frase que un
+   * comprador escribiría en el buscador.
+   *
+   * Es barata y corta, y evita el error que ya nos costó una publicación:
+   * unas cuchillas de cutter terminaron en "Rulemanes de Ruedas".
+   */
+  async buildSearchPhrase(product: CoresaProduct): Promise<string> {
+    const prompt = [
+      '¿Qué es este producto? Respondé con la frase que escribiría alguien que lo busca en MercadoLibre Argentina.',
+      '',
+      'Producto (datos del proveedor):',
+      JSON.stringify(productFactsForPrompt(product), null, 2),
+      '',
+      'Reglas:',
+      '- Máximo 8 palabras.',
+      '- Primero qué es y para qué sirve, después la medida principal si la hay.',
+      '- Sin la marca, sin el código de producto, sin cantidades ni packs.',
+      '- En minúsculas, sin signos de puntuación.',
+      '- Ejemplo: para una cuchilla de 61x19 mm de repuesto, "cuchillas de repuesto para cutter 61x19mm".',
+      '',
+      'Respondé con este JSON:',
+      '{"frase": "..."}',
+    ].join('\n');
+
+    const response = await this.axios.request(this.prepareRequest(prompt));
+    const parsed = this.parseContent(response.data) as { frase?: unknown };
+    return asText(parsed.frase);
+  }
+
   async buildContent(
     product: CoresaProduct,
     categoryAttributes: MeliCategoryAttribute[],

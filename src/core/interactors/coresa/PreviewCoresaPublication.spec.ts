@@ -52,6 +52,9 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
     }),
   };
   const enrichment = {
+    buildSearchPhrase: jest
+      .fn()
+      .mockResolvedValue('paneles led de plafón cuadrado 12w'),
     buildContent: jest.fn().mockResolvedValue({
       title: 'Panel Plafón Cuadrado Macroled 12w Neutro',
       description: 'Descripción generada.',
@@ -138,8 +141,10 @@ describe('PreviewCoresaPublication', () => {
     const deps = buildDeps();
     const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
 
+    // La categoría se pregunta con la frase que arma la IA, no con la
+    // descripción cruda de Coresa.
     expect(deps.meliPublish.predictCategories).toHaveBeenCalledWith(
-      'PANEL PLAFON CUADRADO MACROLED 12W',
+      'paneles led de plafón cuadrado 12w',
     );
     expect(deps.meliPublish.getCategoryAttributes).toHaveBeenCalledWith(
       'MLA1591',
@@ -566,5 +571,54 @@ describe('opciones de venta en una misma publicación', () => {
     expect(result.draft.title).toBe(
       'Panel Plafón Cuadrado Macroled 12w Neutro',
     );
+  });
+});
+
+describe('la frase con la que se pregunta la categoría', () => {
+  it('usa la frase de la IA y no la descripción de Coresa', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    // "SET 10 PIEZAS CUCHILLAS MULTIUSO, TAMAÑO 61X19MM" hizo que ML
+    // contestara "Rulemanes de Ruedas" y ahí terminó una publicación real.
+    expect(deps.enrichment.buildSearchPhrase).toHaveBeenCalledWith(product);
+    expect(result.categoryQuery).toBe('paneles led de plafón cuadrado 12w');
+  });
+
+  it('si la IA falla, cae a la descripción en vez de no publicar', async () => {
+    const deps = buildDeps();
+    deps.enrichment.buildSearchPhrase.mockRejectedValue(
+      new Error('openai caído'),
+    );
+
+    await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(deps.meliPublish.predictCategories).toHaveBeenCalledWith(
+      'PANEL PLAFON CUADRADO MACROLED 12W',
+    );
+  });
+
+  it('una frase vacía también cae a la descripción', async () => {
+    const deps = buildDeps();
+    deps.enrichment.buildSearchPhrase.mockResolvedValue('   ');
+
+    await buildInteractor(deps).execute({ sku: 'PC12NW' });
+
+    expect(deps.meliPublish.predictCategories).toHaveBeenCalledWith(
+      'PANEL PLAFON CUADRADO MACROLED 12W',
+    );
+  });
+
+  it('con categoryId a mano no se le pregunta nada a nadie', async () => {
+    const deps = buildDeps();
+
+    await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      categoryId: 'MLA105407',
+    });
+
+    expect(deps.enrichment.buildSearchPhrase).not.toHaveBeenCalled();
+    expect(deps.meliPublish.predictCategories).not.toHaveBeenCalled();
   });
 });

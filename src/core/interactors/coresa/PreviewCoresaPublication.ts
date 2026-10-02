@@ -87,6 +87,8 @@ export class PreviewCoresaPublicationResult {
   /** Obligatorios que no estaban en los datos de Coresa y dedujo la IA. */
   inferredAttributes: string[];
   status: string;
+  /** La frase con la que se le preguntó la categoría a ML. */
+  categoryQuery: string;
   /** La variante con la que se armó el borrador. */
   variant: PublicationVariant;
   /** Las que ese SKU ya tiene publicadas, para que el panel las muestre. */
@@ -139,14 +141,16 @@ export class PreviewCoresaPublication {
     const publishedVariants = await this.publishedVariantsOf(sku);
     this.rejectDuplicate(sku, variant, publishedVariants);
 
-    const baseTitle = String(product.Descripcion ?? sku).trim();
+    const searchPhrase = input.categoryId
+      ? ''
+      : await this.searchPhraseFor(product, sku);
     const suggestions = input.categoryId
       ? []
-      : await this.meliPublish.predictCategories(baseTitle);
+      : await this.meliPublish.predictCategories(searchPhrase);
     const categoryId = input.categoryId ?? suggestions[0]?.category_id;
     if (!categoryId) {
       throw new BadRequestException(
-        `No se pudo predecir la categoría de ML para "${baseTitle}". Mandá categoryId a mano.`,
+        `No se pudo predecir la categoría de ML para "${searchPhrase}". Mandá categoryId a mano.`,
       );
     }
 
@@ -226,9 +230,42 @@ export class PreviewCoresaPublication {
       missingRequiredAttributes: missing,
       inferredAttributes,
       status: publication?.status ?? (isValid ? 'ready' : 'draft'),
+      categoryQuery: searchPhrase,
       variant,
       publishedVariants,
     };
+  }
+
+  /**
+   * La frase con la que se le pregunta la categoría a ML. La descripción de
+   * Coresa es mala para eso: a "SET 10 PIEZAS CUCHILLAS MULTIUSO, TAMAÑO
+   * 61X19MM" el predictor contesta "Rulemanes de Ruedas", y ahí terminó una
+   * publicación real. Con "cuchillas de repuesto para cutter 61x19mm"
+   * contesta "Cutters y Trinchetas".
+   *
+   * Si la IA falla se usa la descripción, que es lo que se usaba antes: una
+   * categoría mal elegida es mejor que no poder publicar, y el usuario la
+   * puede corregir mandando categoryId.
+   */
+  private async searchPhraseFor(
+    product: CoresaProduct,
+    sku: string,
+  ): Promise<string> {
+    const fallback = String(product.Descripcion ?? sku).trim();
+
+    try {
+      const frase = (await this.enrichment.buildSearchPhrase(product)).trim();
+      if (!frase) return fallback;
+      this.logger.log(`[preview] SKU ${sku}: categoría por "${frase}"`);
+      return frase;
+    } catch (err) {
+      this.logger.warn(
+        `[preview] SKU ${sku}: no se pudo armar la frase de búsqueda, se usa la descripción: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return fallback;
+    }
   }
 
   /**
