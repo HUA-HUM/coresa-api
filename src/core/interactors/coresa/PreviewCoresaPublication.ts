@@ -157,10 +157,9 @@ export class PreviewCoresaPublication {
     const categoryAttributes =
       await this.meliPublish.getCategoryAttributes(categoryId);
 
-    const [content, base, campaign, familyName, pictures] = await Promise.all([
+    const [content, base, familyName, pictures] = await Promise.all([
       this.enrichment.buildContent(product, categoryAttributes, variant),
       this.baseFor(sku),
-      this.financingCosts.campaignFor(variant.modalidad),
       this.familyNameFor(variant, publishedVariants),
       this.images.prepareForMercadoLibre(sku, buildPictures(product)),
     ]);
@@ -175,7 +174,6 @@ export class PreviewCoresaPublication {
         categoryAttributes.map((attribute) => attribute.id),
       ),
       variant,
-      campaign,
       familyName,
       pictures,
     });
