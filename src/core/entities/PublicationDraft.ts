@@ -39,6 +39,11 @@ export class PublicationDraft {
   /** El tipo de la variante. meli-api publica los dos tipos si no se le dice. */
   listing_types?: string[];
   /**
+   * Tags del ítem. Así se activan las campañas de cuotas: 3x_campaign,
+   * 9x_campaign y 12x_campaign sobre premium, pcj-co-funded sobre clásica.
+   */
+  tags?: string[];
+  /**
    * Con qué forma se publica: tipo, unidades y modalidad. Viaja dentro del
    * borrador para que el publicador pueda registrarla cuando ML devuelva el
    * MLA, y se saca del payload antes de mandarlo a meli-api.

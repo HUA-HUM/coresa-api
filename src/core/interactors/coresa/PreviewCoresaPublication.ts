@@ -44,6 +44,7 @@ import {
   PublicationValidation,
 } from '../../entities/PublicationDraft';
 import { CoresaProductInMercadoLibre } from '../../entities/CoresaMercadoLibre';
+import { LISTING_TYPE_BY_CAMPAIGN } from '../../entities/FinancingCost';
 import {
   baseUnitsOf,
   describeVariant,
@@ -130,6 +131,7 @@ export class PreviewCoresaPublication {
     if (!sku) throw new BadRequestException('sku es obligatorio');
 
     const variant = await this.resolveVariant(input);
+    const campaign = await this.campaignFor(variant);
 
     const product = await this.coresaRepo.getProductBySku(sku);
     if (!product) {
@@ -176,6 +178,7 @@ export class PreviewCoresaPublication {
       variant,
       familyName,
       pictures,
+      campaign,
     });
 
     let validation = await this.meliPublish.validateItem(draft);
@@ -232,6 +235,28 @@ export class PreviewCoresaPublication {
       variant,
       publishedVariants,
     };
+  }
+
+  /**
+   * La campaña de cuotas de la modalidad, validada contra el tipo de
+   * publicación. ML devuelve 400 si no coinciden, y es el error que frenaba
+   * todas las pruebas con cuotas: se publicaba en clásica, donde las cuotas
+   * no existen. Se corta acá para que el mensaje diga qué hacer.
+   */
+  private async campaignFor(
+    variant: PublicationVariant,
+  ): Promise<string | null> {
+    const campaign = await this.financingCosts.campaignFor(variant.modalidad);
+    if (!campaign) return null;
+
+    const requerido = LISTING_TYPE_BY_CAMPAIGN[campaign];
+    if (requerido && requerido !== variant.listingType) {
+      const nombre = requerido === 'gold_pro' ? 'premium' : 'clásica';
+      throw new BadRequestException(
+        `La modalidad "${variant.modalidad}" solo se puede ofrecer en publicación ${nombre}. Mandá listingType: "${requerido}".`,
+      );
+    }
+    return campaign;
   }
 
   /**

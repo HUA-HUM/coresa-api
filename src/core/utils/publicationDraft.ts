@@ -265,6 +265,8 @@ export function buildPublicationDraft(params: {
   variant?: PublicationVariant;
   /** Fotos ya pasadas por el CDN. Sin esto, las del proveedor. */
   pictures?: string[];
+  /** La campaña de cuotas de la modalidad, que viaja como tag del ítem. */
+  campaign?: string | null;
   /**
    * El título de una publicación hermana del mismo producto. ML agrupa las
    * opciones de venta por family_name, así que si no es el mismo quedan como
@@ -304,6 +306,9 @@ export function buildPublicationDraft(params: {
     },
     description: content.description,
     listing_types: [variant.listingType],
+    // Sin campaña no va la clave: una lista vacía le borraría al ítem los
+    // tags que ML le pone solo, como immediate_payment.
+    ...(params.campaign ? { tags: [params.campaign] } : {}),
     variant,
   };
 }

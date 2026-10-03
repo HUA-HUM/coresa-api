@@ -25,16 +25,38 @@ export class FinancingCost {
 }
 
 /**
- * El vocabulario que usa ML, observado sobre las publicaciones activas de la
- * cuenta. El contado no lleva campaña: es la ausencia del término de venta.
+ * Las campañas de cuotas se activan con un TAG del ítem. El vocabulario sale
+ * de la documentación de ML y está confirmado sobre las 4300 publicaciones
+ * activas de la cuenta:
+ *
+ *   gold_special  sin campaña    1269
+ *   gold_pro      3x_campaign     367
+ *   gold_pro      sin campaña     364   (las 6 cuotas van por defecto)
+ *   gold_pro      9x_campaign     305
+ *   gold_pro      12x_campaign    303
+ *
+ * Dos modalidades no llevan tag, y no por error: el contado porque no ofrece
+ * cuotas, y las 6 cuotas porque en premium vienen incluidas.
  */
 export const CAMPAIGN_BY_MODALIDAD: Record<string, string | null> = {
   contado: null,
   cuota_promocionada: 'pcj-co-funded',
   '3_cuotas': '3x_campaign',
-  '6_cuotas': '6x_campaign',
+  '6_cuotas': null,
   '9_cuotas': '9x_campaign',
   '12_cuotas': '12x_campaign',
+};
+
+/**
+ * Qué tipo de publicación admite cada campaña. ML devuelve 400 si no
+ * coinciden, y es lo que estaba frenando todas las pruebas con cuotas: se
+ * publicaba en clásica, donde las cuotas no existen.
+ */
+export const LISTING_TYPE_BY_CAMPAIGN: Record<string, string> = {
+  'pcj-co-funded': 'gold_special',
+  '3x_campaign': 'gold_pro',
+  '9x_campaign': 'gold_pro',
+  '12x_campaign': 'gold_pro',
 };
 
 /** Lo que se puede cambiar de una modalidad ya cargada. */
