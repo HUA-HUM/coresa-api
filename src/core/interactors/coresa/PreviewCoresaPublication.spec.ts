@@ -467,6 +467,7 @@ describe('opciones de venta en una misma publicación', () => {
     // publicación entera. Con cuotas no se podía publicar nada.
     const conCuotas = await buildInteractor(deps).execute({
       sku: 'PC12NW',
+      listingType: 'gold_pro',
       modalidad: '12_cuotas',
     });
     const contado = await buildInteractor(deps).execute({ sku: 'PC12NW' });
@@ -483,6 +484,7 @@ describe('opciones de venta en una misma publicación', () => {
 
     const result = await buildInteractor(deps).execute({
       sku: 'PC12NW',
+      listingType: 'gold_pro',
       modalidad: '12_cuotas',
     });
 
@@ -514,6 +516,7 @@ describe('opciones de venta en una misma publicación', () => {
 
     const result = await buildInteractor(deps).execute({
       sku: 'PC12NW',
+      listingType: 'gold_pro',
       modalidad: '12_cuotas',
     });
 
@@ -569,6 +572,7 @@ describe('opciones de venta en una misma publicación', () => {
 
     const result = await buildInteractor(deps).execute({
       sku: 'PC12NW',
+      listingType: 'gold_pro',
       modalidad: '3_cuotas',
     });
 
@@ -625,5 +629,61 @@ describe('la frase con la que se pregunta la categoría', () => {
 
     expect(deps.enrichment.buildSearchPhrase).not.toHaveBeenCalled();
     expect(deps.meliPublish.predictCategories).not.toHaveBeenCalled();
+  });
+});
+
+describe('campañas de cuotas', () => {
+  it('manda la campaña como tag del ítem', async () => {
+    const deps = buildDeps();
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      listingType: 'gold_pro',
+      modalidad: '12_cuotas',
+    });
+
+    expect(result.draft.tags).toEqual(['12x_campaign']);
+  });
+
+  it('no manda tags cuando la modalidad no lleva campaña', async () => {
+    const deps = buildDeps();
+
+    // El contado no ofrece cuotas, y las 6 vienen incluidas en premium: las
+    // dos salen sin tag, y mandar [] le borraría al ítem los de ML.
+    const contado = await buildInteractor(deps).execute({ sku: 'PC12NW' });
+    const seis = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      listingType: 'gold_pro',
+      modalidad: '6_cuotas',
+    });
+
+    expect(contado.draft.tags).toBeUndefined();
+    expect(seis.draft.tags).toBeUndefined();
+  });
+
+  it('no deja pedir cuotas en una publicación clásica', async () => {
+    const deps = buildDeps();
+
+    // Las 1269 clásicas activas de la cuenta no tienen ninguna campaña: en
+    // clásica las cuotas no existen y ML devuelve 400.
+    await expect(
+      buildInteractor(deps).execute({
+        sku: 'PC12NW',
+        listingType: 'gold_special',
+        modalidad: '12_cuotas',
+      }),
+    ).rejects.toThrow(/premium/);
+  });
+
+  it('corta antes de gastar la llamada a OpenAI', async () => {
+    const deps = buildDeps();
+
+    await expect(
+      buildInteractor(deps).execute({
+        sku: 'PC12NW',
+        modalidad: '3_cuotas',
+      }),
+    ).rejects.toThrow();
+    expect(deps.enrichment.buildContent).not.toHaveBeenCalled();
   });
 });
