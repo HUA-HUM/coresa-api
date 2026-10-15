@@ -60,7 +60,10 @@ import {
 } from '../../entities/PublicationVariant';
 import { toNumber } from '../../utils/coresaPriceStock';
 import { FinancingCosts } from './FinancingCosts';
-import { missingRequiredAttributes } from '../../utils/enrichment';
+import {
+  MELI_TITLE_MAX_LENGTH,
+  missingRequiredAttributes,
+} from '../../utils/enrichment';
 import {
   buildPictures,
   buildPublicationDraft,
@@ -316,12 +319,21 @@ export class PreviewCoresaPublication {
         hermana.mla,
       );
       const titulo = snapshot?.title?.trim();
-      if (titulo) {
+      if (!titulo) return undefined;
+
+      // Si la hermana supera el límite de ML es porque la editaron a mano
+      // allá. Se recorta para poder publicar, pero entonces los nombres ya no
+      // coinciden y ML no las va a agrupar: eso hay que decirlo.
+      if (titulo.length > MELI_TITLE_MAX_LENGTH) {
+        this.logger.warn(
+          `[preview] el título de ${hermana.mla} tiene ${titulo.length} caracteres y el límite es ${MELI_TITLE_MAX_LENGTH}: se recorta y las opciones de venta pueden quedar sin agrupar`,
+        );
+      } else {
         this.logger.log(
           `[preview] se reusa el título de ${hermana.mla} para agrupar las opciones de venta`,
         );
       }
-      return titulo || undefined;
+      return titulo;
     } catch (err) {
       // Sin el título se publica igual, pero suelta. Se avisa porque es
       // justo lo que esta función viene a evitar.

@@ -687,3 +687,61 @@ describe('campañas de cuotas', () => {
     expect(deps.enrichment.buildContent).not.toHaveBeenCalled();
   });
 });
+
+describe('el límite de 60 caracteres también vale para el nombre de familia', () => {
+  const hermana = {
+    sku: 'PC12NW',
+    mla: 'MLA333',
+    updatePrice: true,
+    updateStock: true,
+    listingType: 'gold_special',
+    unitsPerListing: 1,
+    modalidad: 'contado',
+    priceFactor: 1,
+    origen: 'publicador',
+  };
+
+  it('recorta el título de la hermana si alguien lo alargó en ML', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([hermana]);
+    deps.internalApi.getMercadoLibreProductByMla.mockResolvedValue({
+      meli_item_id: 'MLA333',
+      price: 9983,
+      available_quantity: 100,
+      // 65 caracteres: ML rechaza el borrador entero con "Family Name length
+      // is over of 60 character".
+      title:
+        'Pack X 10 Artefacto Embutir Cuadrado Antideslumbrante Ar111 Negro',
+    });
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      listingType: 'gold_pro',
+      modalidad: '12_cuotas',
+    });
+
+    expect(result.draft.title.length).toBeLessThanOrEqual(60);
+    expect(result.draft.title).toBe(
+      'Pack X 10 Artefacto Embutir Cuadrado Antideslumbrante Ar111',
+    );
+  });
+
+  it('un título que entra se reusa entero, para que ML agrupe', async () => {
+    const deps = buildDeps();
+    deps.internalApi.listVariantsBySku.mockResolvedValue([hermana]);
+    deps.internalApi.getMercadoLibreProductByMla.mockResolvedValue({
+      meli_item_id: 'MLA333',
+      price: 9983,
+      available_quantity: 100,
+      title: 'Panel Plafón Cuadrado Macroled 12w',
+    });
+
+    const result = await buildInteractor(deps).execute({
+      sku: 'PC12NW',
+      listingType: 'gold_pro',
+      modalidad: '12_cuotas',
+    });
+
+    expect(result.draft.title).toBe('Panel Plafón Cuadrado Macroled 12w');
+  });
+});

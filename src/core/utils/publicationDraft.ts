@@ -6,6 +6,7 @@ import {
   PublicationVariant,
 } from '../entities/PublicationVariant';
 import { toNumber } from './coresaPriceStock';
+import { truncateTitle } from './enrichment';
 
 export const DEFAULT_WARRANTY_TYPE = 'Garantía del vendedor';
 export const DEFAULT_WARRANTY_TIME = '12 meses';
@@ -279,7 +280,11 @@ export function buildPublicationDraft(params: {
 
   return {
     sku: String(product.SKU ?? '').trim(),
-    title: params.familyName?.trim() || content.title,
+    // El nombre de familia también entra en el límite de 60 de ML. Viene de
+    // una publicación hermana, y si alguien la editó a mano en ML puede estar
+    // por encima: "Family Name length is over of 60 character" rechaza el
+    // borrador entero.
+    title: truncateTitle(params.familyName?.trim() || content.title),
     category_id: categoryId,
     price,
     available_quantity: availableQuantity,
