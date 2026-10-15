@@ -16,12 +16,39 @@ import { CoresaProductInMercadoLibre } from '../../entities/CoresaMercadoLibre';
 import { baseUnitsOf } from '../../entities/PublicationVariant';
 import { toNumber } from '../../utils/coresaPriceStock';
 
+/** De qué campo de Coresa salió el empaque con el que se publica. */
+export type OrigenDelEmpaque = 'intermedia' | 'master' | 'unidad';
+
+/**
+ * Con cuántas unidades conviene publicar.
+ *
+ * Coresa manda dos cantidades y en casi la mitad del catálogo la intermedia
+ * viene en 0: 2595 de 5544 productos tienen intermedia 0 o 1 y master mayor a
+ * 1. Para esos la caja real es la master, y sugerir una unidad suelta es
+ * sugerir algo que el proveedor no despacha.
+ */
+export function empaqueDe(
+  intermedia: number,
+  master: number,
+): { empaque: number; empaqueOrigen: OrigenDelEmpaque } {
+  if (intermedia > 1) {
+    return { empaque: intermedia, empaqueOrigen: 'intermedia' };
+  }
+  if (master > 1) return { empaque: master, empaqueOrigen: 'master' };
+  return { empaque: 1, empaqueOrigen: 'unidad' };
+}
+
 export class CoresaSkuInfo {
   sku: string;
   descripcion: string;
   marca: string;
-  /** Cuántas unidades trae el empaque de Coresa (CantIntermedia). */
+  /** Cuántas unidades trae la caja con la que conviene publicar. */
   empaque: number;
+  /** De dónde salió ese número, para que el panel lo pueda explicar. */
+  empaqueOrigen: OrigenDelEmpaque;
+  /** Los dos campos de Coresa, tal como vienen. */
+  cantidadIntermedia: number;
+  cantidadMaster: number;
   /** Lo que sale ese empaque: es el precio que compone Coresa. */
   precioEmpaque: number;
   precioUnitario: number;
@@ -71,9 +98,17 @@ export class GetCoresaSkuInfo {
       );
     }
 
-    const empaque = baseUnitsOf(stored);
+    const fuente = product ?? stored;
+    const intermedia = Math.floor(toNumber(fuente.CantIntermedia));
+    const master = Math.floor(toNumber(fuente.CantMaster));
+    const { empaque, empaqueOrigen } = empaqueDe(intermedia, master);
+
     const precioEmpaque = Math.round(toNumber(stored.Precio_Convertido));
     const disponible = Math.floor(toNumber(stored.Disponible));
+    // base_units es a cuántas unidades corresponde Precio_Convertido, y no es
+    // lo mismo que el empaque: cuando Coresa no manda intermedia, el precio es
+    // por unidad y la caja es la master.
+    const baseUnits = baseUnitsOf(stored);
 
     return {
       sku,
@@ -82,9 +117,12 @@ export class GetCoresaSkuInfo {
       ).trim(),
       marca: String(product?.Marca ?? stored.Marca ?? '').trim(),
       empaque,
+      empaqueOrigen,
+      cantidadIntermedia: intermedia,
+      cantidadMaster: master,
       precioEmpaque,
       // El precio unitario es la base de todo cálculo de precio.
-      precioUnitario: Math.round(precioEmpaque / empaque),
+      precioUnitario: Math.round(precioEmpaque / baseUnits),
       disponible,
       empaquesDisponibles: Math.floor(disponible / empaque),
       unidadesSugeridas: empaque,
