@@ -1,9 +1,11 @@
-import { GetCoresaSkuInfo } from './GetCoresaSkuInfo';
+import { empaqueDe, GetCoresaSkuInfo } from './GetCoresaSkuInfo';
 
 const coresa = {
   SKU: 'JDAC1345',
   Descripcion: 'DISCO ABRASIVO PARA CORTE DE METAL',
   Marca: 'Jadever',
+  CantIntermedia: 100,
+  CantMaster: 400,
   Venta_Unitaria: false,
 };
 
@@ -14,10 +16,13 @@ const almacenado = {
   Disponible: 28405,
 };
 
-function build(overrides: Record<string, unknown> = {}) {
+function build(
+  overrides: Record<string, unknown> = {},
+  producto: Record<string, unknown> = coresa,
+) {
   const coresaRepo = {
     getAllProducts: jest.fn(),
-    getProductBySku: jest.fn().mockResolvedValue(coresa),
+    getProductBySku: jest.fn().mockResolvedValue(producto),
   };
   const internalApi = {
     getCoresaProductBySku: jest.fn().mockResolvedValue(almacenado),
@@ -90,7 +95,7 @@ describe('GetCoresaSkuInfo', () => {
     );
   });
 
-  it('un empaque sin cargar vale 1, no 0', async () => {
+  it('base_units sin cargar vale 1, no 0', async () => {
     const { interactor } = build({
       getCoresaProductBySku: jest
         .fn()
@@ -99,7 +104,76 @@ describe('GetCoresaSkuInfo', () => {
 
     const info = await interactor.execute('JDAC1345');
 
-    expect(info.empaque).toBe(1);
+    // El empaque sigue saliendo de CantIntermedia; lo que cae a 1 es
+    // base_units, que es con lo que se divide el precio.
+    expect(info.empaque).toBe(100);
     expect(info.precioUnitario).toBe(84771);
+  });
+});
+
+describe('empaqueDe', () => {
+  it('usa la intermedia cuando Coresa la manda', () => {
+    expect(empaqueDe(100, 400)).toEqual({
+      empaque: 100,
+      empaqueOrigen: 'intermedia',
+    });
+  });
+
+  it('cae a la master cuando la intermedia viene en 0', () => {
+    // CSL-EMERGENCIA: intermedia 0, master 10. Es casi la mitad del catálogo,
+    // 2595 de 5544 productos, y para esos sugerir una unidad suelta es
+    // sugerir algo que el proveedor no despacha.
+    expect(empaqueDe(0, 10)).toEqual({ empaque: 10, empaqueOrigen: 'master' });
+    expect(empaqueDe(1, 50)).toEqual({ empaque: 50, empaqueOrigen: 'master' });
+  });
+
+  it('sin ninguna de las dos, se vende por unidad', () => {
+    expect(empaqueDe(0, 0)).toEqual({ empaque: 1, empaqueOrigen: 'unidad' });
+    expect(empaqueDe(1, 1)).toEqual({ empaque: 1, empaqueOrigen: 'unidad' });
+  });
+});
+
+describe('GetCoresaSkuInfo, empaque sin intermedia', () => {
+  it('sugiere la caja master y deja ver los dos números', async () => {
+    const { interactor } = build(
+      {
+        getCoresaProductBySku: jest.fn().mockResolvedValue({
+          SKU: 'CSL-EMERGENCIA',
+          Precio_Convertido: 39677,
+          base_units: 1,
+          Disponible: 1887,
+        }),
+      },
+      { SKU: 'CSL-EMERGENCIA', CantIntermedia: 0, CantMaster: 10 },
+    );
+
+    const info = await interactor.execute('CSL-EMERGENCIA');
+
+    expect(info.empaque).toBe(10);
+    expect(info.empaqueOrigen).toBe('master');
+    expect(info.cantidadIntermedia).toBe(0);
+    expect(info.cantidadMaster).toBe(10);
+    expect(info.unidadesSugeridas).toBe(10);
+    expect(info.empaquesDisponibles).toBe(188);
+  });
+
+  it('el precio unitario sale de base_units, no del empaque', async () => {
+    // Precio_Convertido corresponde a una unidad porque Coresa no manda
+    // intermedia. Dividir por la master daría una décima parte del precio.
+    const { interactor } = build(
+      {
+        getCoresaProductBySku: jest.fn().mockResolvedValue({
+          SKU: 'CSL-EMERGENCIA',
+          Precio_Convertido: 39677,
+          base_units: 1,
+          Disponible: 1887,
+        }),
+      },
+      { SKU: 'CSL-EMERGENCIA', CantIntermedia: 0, CantMaster: 10 },
+    );
+
+    const info = await interactor.execute('CSL-EMERGENCIA');
+
+    expect(info.precioUnitario).toBe(39677);
   });
 });
