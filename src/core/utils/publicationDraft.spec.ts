@@ -1,6 +1,7 @@
 import { CoresaProduct } from '../entities/CoresaProduct';
 import {
   buildPublicationDraft,
+  withProductAttributes,
   getGtin,
   isValidGtin,
   packageAttributes,
@@ -270,14 +271,20 @@ describe('atributos de paquete e impuestos', () => {
     expect(draft.variant?.unitsPerListing).toBe(6);
   });
 
-  it('no manda GTIN en un pack: el código de la unidad no lo identifica', () => {
+  it('dice por qué falta el GTIN en un pack, en vez de callarse', () => {
     const draft = buildPublicationDraft({
       product,
       categoryId: 'MLA1591',
       content,
       price: 1777,
       availableQuantity: 175,
-      allowedAttributeIds: new Set(['BRAND', 'MODEL', 'GTIN', 'COLOR']),
+      allowedAttributeIds: new Set([
+        'BRAND',
+        'MODEL',
+        'GTIN',
+        'EMPTY_GTIN_REASON',
+        'COLOR',
+      ]),
       variant: {
         listingType: 'gold_special',
         unitsPerListing: 6,
@@ -286,7 +293,13 @@ describe('atributos de paquete e impuestos', () => {
       },
     });
 
+    // "The attributes [GTIN] are required for category": donde el código es
+    // obligatorio, omitirlo sin explicar rechaza la publicación entera.
     expect(draft.attributes.map((a) => a.id)).not.toContain('GTIN');
+    expect(draft.attributes).toContainEqual({
+      id: 'EMPTY_GTIN_REASON',
+      value_id: '17055159',
+    });
   });
 });
 
@@ -409,5 +422,56 @@ describe('paquete de un pack', () => {
       { id: 'SELLER_PACKAGE_LENGTH', value_name: '40 cm' },
       { id: 'SELLER_PACKAGE_WEIGHT', value_name: '800 g' },
     ]);
+  });
+});
+
+describe('motivo de GTIN vacío', () => {
+  const allowed = new Set(['BRAND', 'GTIN', 'EMPTY_GTIN_REASON']);
+  const contenido = { ...content, attributes: [] };
+
+  function attrs(producto: CoresaProduct, unidades: number) {
+    return withProductAttributes(
+      [],
+      producto,
+      contenido,
+      allowed,
+      unidades,
+    ).reduce<Record<string, string | undefined>>((acc, a) => {
+      acc[a.id] = a.value_name ?? a.value_id;
+      return acc;
+    }, {});
+  }
+
+  it('una unidad con código válido manda el GTIN', () => {
+    expect(attrs(product, 1).GTIN).toBe('4050118376722');
+    expect(attrs(product, 1).EMPTY_GTIN_REASON).toBeUndefined();
+  });
+
+  it('un pack dice que es un kit o un pack', () => {
+    expect(attrs(product, 20).GTIN).toBeUndefined();
+    expect(attrs(product, 20).EMPTY_GTIN_REASON).toBe('17055159');
+  });
+
+  it('sin código de barras válido dice que no tiene código registrado', () => {
+    const sinCodigo = {
+      ...product,
+      CodBarra_Unitario: 'N',
+      CodBarra_Master: '',
+    } as CoresaProduct;
+
+    expect(attrs(sinCodigo, 1).GTIN).toBeUndefined();
+    expect(attrs(sinCodigo, 1).EMPTY_GTIN_REASON).toBe('17055160');
+  });
+
+  it('no lo manda si la categoría no lo admite', () => {
+    const sinAtributo = withProductAttributes(
+      [],
+      product,
+      contenido,
+      new Set(['BRAND']),
+      20,
+    );
+
+    expect(sinAtributo.map((a) => a.id)).not.toContain('EMPTY_GTIN_REASON');
   });
 });
