@@ -14,6 +14,14 @@ export const MAX_PICTURES = 10;
 /** Producto nacionalizado por el proveedor: el comprador no paga aduana. */
 export const DEFAULT_IMPORT_DUTY = '0 %';
 
+/**
+ * Cuando no va el GTIN hay que decir por qué, o ML rechaza la publicación en
+ * las categorías donde el código es obligatorio. Los dos motivos que nos
+ * aplican, con los ids que usa ML:
+ */
+export const GTIN_REASON_PACK = '17055159'; // El producto es un kit o un pack
+export const GTIN_REASON_SIN_CODIGO = '17055160'; // No tiene código registrado
+
 export function getShippingMode(): string {
   return String(process.env.MELI_SHIPPING_MODE ?? 'me2').trim() || 'me2';
 }
@@ -228,18 +236,27 @@ export function withProductAttributes(
     { id: 'IMPORT_DUTY', value_name: DEFAULT_IMPORT_DUTY },
     { id: 'BRAND', value_name: String(product.Marca ?? '').trim() },
     { id: 'MODEL', value_name: content.model },
-    // El código de barras de la unidad no identifica al pack, y ML lo valida
-    // contra su base global: en un pack es preferible no mandarlo.
-    {
-      id: 'GTIN',
-      value_name: unitsPerListing > 1 ? '' : getGtin(product),
-    },
   ];
+
+  // El código de barras de la unidad no identifica al pack, y ML lo valida
+  // contra su base global: en un pack es preferible no mandarlo. Pero callarse
+  // no alcanza: donde el GTIN es obligatorio hay que decir por qué falta, o ML
+  // rechaza la publicación entera.
+  const gtin = unitsPerListing > 1 ? '' : getGtin(product);
+  if (gtin) {
+    candidates.push({ id: 'GTIN', value_name: gtin });
+  } else {
+    candidates.push({
+      id: 'EMPTY_GTIN_REASON',
+      value_id: unitsPerListing > 1 ? GTIN_REASON_PACK : GTIN_REASON_SIN_CODIGO,
+    });
+  }
 
   for (const candidate of candidates) {
     if (present.has(candidate.id)) continue;
     if (!allowedIds.has(candidate.id)) continue;
-    if (!candidate.value_name) continue;
+    // Un atributo de lista viaja con value_id y sin value_name.
+    if (!candidate.value_name && !candidate.value_id) continue;
     result.push(candidate);
     present.add(candidate.id);
   }
