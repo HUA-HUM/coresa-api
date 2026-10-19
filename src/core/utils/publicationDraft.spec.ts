@@ -271,9 +271,10 @@ describe('atributos de paquete e impuestos', () => {
     expect(draft.variant?.unitsPerListing).toBe(6);
   });
 
-  it('dice por qué falta el GTIN en un pack, en vez de callarse', () => {
+  it('un pack se publica con el código de la caja', () => {
     const draft = buildPublicationDraft({
-      product,
+      // Como BFST19G-2WW: trae el código de la unidad y el de la caja.
+      product: { ...product, CodBarra_Master: '74283255713108' },
       categoryId: 'MLA1591',
       content,
       price: 1777,
@@ -293,13 +294,16 @@ describe('atributos de paquete e impuestos', () => {
       },
     });
 
-    // "The attributes [GTIN] are required for category": donde el código es
-    // obligatorio, omitirlo sin explicar rechaza la publicación entera.
-    expect(draft.attributes.map((a) => a.id)).not.toContain('GTIN');
+    // Probado contra ML: en las categorías donde el GTIN es obligatorio, el
+    // motivo de GTIN vacío NO alcanza como reemplazo. Y el código de la caja
+    // es el que de verdad describe lo que se despacha.
     expect(draft.attributes).toContainEqual({
-      id: 'EMPTY_GTIN_REASON',
-      value_id: '17055159',
+      id: 'GTIN',
+      value_name: '74283255713108',
     });
+    expect(draft.attributes.map((a) => a.id)).not.toContain(
+      'EMPTY_GTIN_REASON',
+    );
   });
 });
 
@@ -447,9 +451,21 @@ describe('motivo de GTIN vacío', () => {
     expect(attrs(product, 1).EMPTY_GTIN_REASON).toBeUndefined();
   });
 
-  it('un pack dice que es un kit o un pack', () => {
-    expect(attrs(product, 20).GTIN).toBeUndefined();
-    expect(attrs(product, 20).EMPTY_GTIN_REASON).toBe('17055159');
+  it('un pack usa el código de la caja y no el de la unidad', () => {
+    const conCaja = {
+      ...product,
+      CodBarra_Master: '74283255713108',
+    } as CoresaProduct;
+
+    expect(attrs(conCaja, 20).GTIN).toBe('74283255713108');
+    expect(attrs(conCaja, 1).GTIN).toBe('4050118376722');
+    expect(attrs(conCaja, 20).EMPTY_GTIN_REASON).toBeUndefined();
+  });
+
+  it('si la caja no tiene código válido, cae al de la unidad', () => {
+    const sinMaster = { ...product, CodBarra_Master: '' } as CoresaProduct;
+
+    expect(attrs(sinMaster, 20).GTIN).toBe('4050118376722');
   });
 
   it('sin código de barras válido dice que no tiene código registrado', () => {
