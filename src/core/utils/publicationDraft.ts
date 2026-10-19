@@ -112,15 +112,23 @@ export function isValidGtin(value: string): boolean {
 }
 
 /**
- * Código de barras que se manda como GTIN. Coresa a veces trae el unitario
- * mal (por ejemplo con un cero de más), así que se prueba el unitario y,
- * si no cierra, el master.
+ * Código de barras que se manda como GTIN. Coresa trae dos: el de la unidad y
+ * el de la caja. Para una publicación de varias unidades se prefiere el de la
+ * caja, que es lo que de verdad se despacha; además es menos probable que ML
+ * lo matchee contra un producto de catálogo de una unidad y termine
+ * comparando un pack con una unidad suelta.
+ *
+ * Coresa a veces trae alguno de los dos mal, así que se usa el primero que
+ * sea un GTIN válido.
  */
-export function getGtin(product: CoresaProduct): string {
-  const candidates = [
-    String(product.CodBarra_Unitario ?? '').trim(),
-    String(product.CodBarra_Master ?? '').trim(),
-  ];
+export function getGtin(
+  product: CoresaProduct,
+  unitsPerListing: number = 1,
+): string {
+  const unitario = String(product.CodBarra_Unitario ?? '').trim();
+  const master = String(product.CodBarra_Master ?? '').trim();
+  const candidates =
+    unitsPerListing > 1 ? [master, unitario] : [unitario, master];
   return candidates.find((candidate) => isValidGtin(candidate)) ?? '';
 }
 
@@ -238,11 +246,11 @@ export function withProductAttributes(
     { id: 'MODEL', value_name: content.model },
   ];
 
-  // El código de barras de la unidad no identifica al pack, y ML lo valida
-  // contra su base global: en un pack es preferible no mandarlo. Pero callarse
-  // no alcanza: donde el GTIN es obligatorio hay que decir por qué falta, o ML
-  // rechaza la publicación entera.
-  const gtin = unitsPerListing > 1 ? '' : getGtin(product);
+  // En las categorías donde el GTIN es obligatorio, omitirlo rechaza la
+  // publicación entera, y el motivo de GTIN vacío NO alcanza como reemplazo:
+  // probado contra ML, "El producto es un kit o un pack" se rechaza igual.
+  // Así que el pack se publica con el código de la caja.
+  const gtin = getGtin(product, unitsPerListing);
   if (gtin) {
     candidates.push({ id: 'GTIN', value_name: gtin });
   } else {
