@@ -56,6 +56,7 @@ function buildDeps(status = 'draft') {
     }),
     createItem: jest.fn(),
     updateDescription: jest.fn(),
+    deleteItem: jest.fn(),
   };
   return { publications, meliPublish };
 }

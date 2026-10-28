@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
   Param,
@@ -24,6 +25,10 @@ import {
   PreviewCoresaPublication,
   PreviewCoresaPublicationResult,
 } from '../../../core/interactors/coresa/PreviewCoresaPublication';
+import {
+  DeleteCoresaPublication,
+  DeletePublicationResult,
+} from '../../../core/interactors/coresa/DeleteCoresaPublication';
 import {
   PublishCoresaPublication,
   PublishCoresaPublicationResult,
@@ -77,6 +82,7 @@ export class PublicationsCoresaController {
     private readonly publishPublication: PublishCoresaPublication,
     private readonly queryPublications: QueryCoresaPublications,
     private readonly updateDraft: UpdateCoresaPublicationDraft,
+    private readonly deletePublication: DeleteCoresaPublication,
   ) {}
 
   @Get()
@@ -248,6 +254,26 @@ export class PublicationsCoresaController {
     return this.publishPublication.execute({
       publicationId: id,
       draft: body?.draft,
+      requestedBy: body?.requestedBy,
+    });
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary:
+      'Elimina la publicación de MercadoLibre y la saca del actualizador',
+    description:
+      'No hay vuelta atrás: ML cierra el ítem y lo marca como eliminado, y un ítem cerrado no se puede reactivar. Es para una publicación que salió mal —en la tienda equivocada, con el precio equivocado— y hay que rehacerla. La fila del actualizador se saca aunque ML falle, para que no siga manteniendo algo que se quiso dar de baja. El registro queda en el historial, en estado discarded.',
+  })
+  @ApiParam({ name: 'id', example: 34 })
+  @ApiOkResponse({ description: 'Qué se pudo eliminar y qué no' })
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body?: { requestedBy?: string },
+  ): Promise<DeletePublicationResult> {
+    this.logger.warn(`[delete] eliminando la publicación ${id}`);
+    return this.deletePublication.execute({
+      publicationId: id,
       requestedBy: body?.requestedBy,
     });
   }

@@ -84,6 +84,7 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
     listFinancingCosts: jest.fn().mockResolvedValue([]),
     updateFinancingCost: jest.fn(),
     createFinancingCost: jest.fn(),
+    unlinkProductInMercadoLibre: jest.fn(),
     getMercadoLibreProductByMla: jest.fn(),
     upsertProductInMercadoLibre: jest.fn(),
     startProcessRun: jest.fn(),

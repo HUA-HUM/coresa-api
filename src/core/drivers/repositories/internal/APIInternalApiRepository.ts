@@ -107,7 +107,7 @@ export class APIInternalApiRepository {
     path: string,
     query: Record<string, string | number> = {},
     data?: unknown,
-    method?: 'GET' | 'POST' | 'PATCH',
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   ): AxiosRequestConfig {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -405,6 +405,26 @@ export class APIInternalApiRepository {
       );
     }
     return mapFinancingCost(unwrapOne(response.data));
+  }
+
+  async unlinkProductInMercadoLibre(mla: string): Promise<void> {
+    const encoded = encodeURIComponent(mla);
+    const config = this.prepareRequest(
+      `/internal/coresa/products-in-mercadolibre/by-mla/${encoded}`,
+      {},
+      undefined,
+      'DELETE',
+    );
+    const response = await this.request(config);
+    // Un 404 es el estado deseado: la fila ya no está.
+    if (
+      response.status !== 404 &&
+      (response.status < 200 || response.status >= 300)
+    ) {
+      throw new Error(
+        `[internal-api] desvincular ${mla} -> ${response.status}: ${JSON.stringify(response.data)}`,
+      );
+    }
   }
 
   async listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]> {

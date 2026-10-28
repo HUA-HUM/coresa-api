@@ -45,6 +45,7 @@ function buildDeps() {
       },
     }),
     updateDescription: jest.fn().mockResolvedValue(undefined),
+    deleteItem: jest.fn(),
   };
   const publications = {
     create: jest.fn(),
