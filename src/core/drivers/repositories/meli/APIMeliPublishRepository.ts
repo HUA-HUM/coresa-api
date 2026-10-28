@@ -42,7 +42,7 @@ export class APIMeliPublishRepository {
   }
 
   private prepareRequest(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     query: Record<string, string | number> = {},
     data?: unknown,
@@ -126,6 +126,14 @@ export class APIMeliPublishRepository {
     );
     const response = await this.axios.request(config);
     return response.data as PublicationCreation;
+  }
+
+  async deleteItem(itemId: string): Promise<void> {
+    const config = this.prepareRequest(
+      'DELETE',
+      `/meli/items/${encodeURIComponent(itemId)}`,
+    );
+    await this.axios.request(config);
   }
 
   async updateDescription(itemId: string, description: string): Promise<void> {

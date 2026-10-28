@@ -35,6 +35,8 @@ export interface IInternalApiRepository {
     changes: FinancingCostChanges,
   ): Promise<FinancingCost | null>;
   createFinancingCost(cost: NewFinancingCost): Promise<FinancingCost | null>;
+  /** Saca la publicación del actualizador. */
+  unlinkProductInMercadoLibre(mla: string): Promise<void>;
   /** Las variantes ya publicadas de un SKU, para no publicar dos veces la misma. */
   listVariantsBySku(sku: string): Promise<CoresaProductInMercadoLibre[]>;
   upsertProductInMercadoLibre(

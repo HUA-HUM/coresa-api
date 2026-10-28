@@ -27,6 +27,7 @@ import { IProductEnrichmentRepositoryToken } from '../core/adapters/repositories
 import { IProductImageRepositoryToken } from '../core/adapters/repositories/IProductImageRepository';
 import { FinancingCosts } from '../core/interactors/coresa/FinancingCosts';
 import { GetCoresaSkuInfo } from '../core/interactors/coresa/GetCoresaSkuInfo';
+import { DeleteCoresaPublication } from '../core/interactors/coresa/DeleteCoresaPublication';
 import { PreviewCoresaPublication } from '../core/interactors/coresa/PreviewCoresaPublication';
 import { PublishCoresaPublication } from '../core/interactors/coresa/PublishCoresaPublication';
 import { QueryCoresaPublications } from '../core/interactors/coresa/QueryCoresaPublications';
@@ -88,6 +89,7 @@ import { SyncCoresaProductsToMercadoLibreApi } from '../core/interactors/coresa/
     SyncCoresaProductsToMercadoLibreProcess,
     FinancingCosts,
     GetCoresaSkuInfo,
+    DeleteCoresaPublication,
     PreviewCoresaPublication,
     PublishCoresaPublication,
     QueryCoresaPublications,
