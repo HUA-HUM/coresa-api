@@ -59,6 +59,7 @@ describe('DeleteCoresaPublication', () => {
     expect(result.listings).toEqual([
       { mla: 'MLA111', deleted: true, unlinked: true },
     ]);
+    expect(result.recordDiscarded).toBe(true);
   });
 
   it('elimina los dos tipos cuando la publicación creó clásica y premium', async () => {
@@ -129,5 +130,49 @@ describe('DeleteCoresaPublication', () => {
     await expect(build(deps).execute({ publicationId: 99 })).rejects.toThrow(
       /no existe/,
     );
+  });
+});
+
+describe('DeleteCoresaPublication, el registro no puede tirar abajo el borrado', () => {
+  it('no falla si internal-api rechaza descartar el registro', async () => {
+    // internal-api trata published como estado terminal, asi que esto falla
+    // justo en el caso normal: eliminar algo que estaba publicado. El item ya
+    // no esta en ML y la fila ya no esta en el actualizador; un 500 haria
+    // creer que no paso nada y que hay que reintentar lo que ya se hizo.
+    const deps = buildDeps();
+    deps.publications.update.mockRejectedValue(
+      new Error('Invalid status transition published -> discarded'),
+    );
+
+    const result = await build(deps).execute({ publicationId: 34 });
+
+    expect(result.listings[0]).toEqual({
+      mla: 'MLA111',
+      deleted: true,
+      unlinked: true,
+    });
+    expect(result.recordDiscarded).toBe(false);
+    expect(result.recordError).toMatch(/published -> discarded/);
+  });
+
+  it('el borrado en ML y la desvinculacion pasan antes que el registro', async () => {
+    const orden: string[] = [];
+    const deps = buildDeps();
+    deps.meliPublish.deleteItem.mockImplementation(() => {
+      orden.push('ml');
+      return Promise.resolve(undefined);
+    });
+    deps.internalApi.unlinkProductInMercadoLibre.mockImplementation(() => {
+      orden.push('desvincular');
+      return Promise.resolve(undefined);
+    });
+    deps.publications.update.mockImplementation(() => {
+      orden.push('registro');
+      return Promise.resolve({ id: 34 });
+    });
+
+    await build(deps).execute({ publicationId: 34 });
+
+    expect(orden).toEqual(['ml', 'desvincular', 'registro']);
   });
 });

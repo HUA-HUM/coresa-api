@@ -36,6 +36,9 @@ export class DeletePublicationResult {
   publicationId: number;
   sku: string;
   listings: DeletedListing[];
+  /** Si el registro quedó marcado como descartado. */
+  recordDiscarded: boolean;
+  recordError?: string;
 }
 
 /**
@@ -90,17 +93,40 @@ export class DeleteCoresaPublication {
 
     // El registro queda, con su historial: sirve para saber qué se publicó y
     // por qué se dio de baja. Lo que no queda es la publicación.
-    await this.publications.update(input.publicationId, {
-      status: 'discarded',
-      errorCode: null,
-      errorMessage: `Eliminada por ${input.requestedBy ?? 'el panel'}`,
-    });
+    //
+    // Y si esto falla, no falla el borrado. El ítem ya no está en ML y la
+    // fila ya no está en el actualizador: tirar un 500 acá haría creer que no
+    // pasó nada y que hay que reintentar algo que ya se hizo.
+    const record = await this.discardRecord(input);
 
     return {
       publicationId: input.publicationId,
       sku: publication.sku,
       listings,
+      recordDiscarded: record.ok,
+      ...(record.error === undefined ? {} : { recordError: record.error }),
     };
+  }
+
+  private async discardRecord(
+    input: DeletePublicationInput,
+  ): Promise<{ ok: boolean; error?: string }> {
+    try {
+      await this.publications.update(input.publicationId, {
+        status: 'discarded',
+        errorCode: null,
+        errorMessage: `Eliminada por ${input.requestedBy ?? 'el panel'}`,
+      });
+      return { ok: true };
+    } catch (err) {
+      const detalle = err instanceof Error ? err.message : String(err);
+      // internal-api trata published como estado terminal, así que hoy esto
+      // falla justo en el caso normal: eliminar algo que estaba publicado.
+      this.logger.warn(
+        `[delete] la publicación ${input.publicationId} se eliminó pero el registro quedó como estaba: ${detalle}`,
+      );
+      return { ok: false, error: detalle };
+    }
   }
 
   private async deleteOne(mla: string, sku: string): Promise<DeletedListing> {
