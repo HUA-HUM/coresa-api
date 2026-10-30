@@ -415,15 +415,20 @@ export class APIInternalApiRepository {
       undefined,
       'DELETE',
     );
-    const response = await this.request(config);
-    // Un 404 es el estado deseado: la fila ya no está.
-    if (
-      response.status !== 404 &&
-      (response.status < 200 || response.status >= 300)
-    ) {
-      throw new Error(
-        `[internal-api] desvincular ${mla} -> ${response.status}: ${JSON.stringify(response.data)}`,
-      );
+    // Un 404 es el estado deseado: la fila ya no está. Y axios lo tira como
+    // excepción, no lo devuelve como respuesta, así que hay que atraparlo:
+    // mirar response.status nunca alcanzaba y una fila ya desvinculada se
+    // reportaba como "sigue en el actualizador".
+    try {
+      const response = await this.request(config);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `[internal-api] desvincular ${mla} -> ${response.status}: ${JSON.stringify(response.data)}`,
+        );
+      }
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return;
+      throw err;
     }
   }
 
