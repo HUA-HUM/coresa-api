@@ -219,3 +219,62 @@ describe('APIInternalApiRepository', () => {
     await expect(repo.getMercadoLibreProductByMla('MLA0')).resolves.toBeNull();
   });
 });
+
+describe('APIInternalApiRepository.unlinkProductInMercadoLibre', () => {
+  const env = process.env;
+  beforeEach(() => {
+    process.env = {
+      ...env,
+      INTERNAL_API_URL: 'https://internal.example.com',
+      INTERNAL_API_KEY: '_internal',
+    };
+  });
+  afterEach(() => {
+    process.env = env;
+  });
+
+  function httpError(status: number) {
+    return Object.assign(
+      new Error(`Request failed with status code ${status}`),
+      {
+        isAxiosError: true,
+        response: { status, data: {} },
+      },
+    );
+  }
+
+  it('manda el DELETE de la fila', async () => {
+    const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await repo.unlinkProductInMercadoLibre('MLA4022069192');
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'DELETE',
+        url: 'https://internal.example.com/internal/coresa/products-in-mercadolibre/by-mla/MLA4022069192',
+      }),
+    );
+  });
+
+  it('un 404 es éxito: la fila ya no está', async () => {
+    // axios tira el 404 como excepción en vez de devolverlo como respuesta,
+    // así que una fila ya desvinculada se reportaba como "sigue en el
+    // actualizador".
+    const request = jest.fn().mockRejectedValue(httpError(404));
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(
+      repo.unlinkProductInMercadoLibre('MLA4022069192'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('cualquier otro error sí se propaga', async () => {
+    const request = jest.fn().mockRejectedValue(httpError(500));
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(
+      repo.unlinkProductInMercadoLibre('MLA4022069192'),
+    ).rejects.toThrow(/500/);
+  });
+});
