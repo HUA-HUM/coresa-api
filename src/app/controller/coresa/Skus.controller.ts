@@ -23,7 +23,7 @@ export class SkusCoresaController {
   @ApiOperation({
     summary: 'Los datos de un SKU para elegir cómo publicarlo',
     description:
-      'Lo que el panel necesita antes de armar el borrador: con cuántas unidades viene el empaque de Coresa, cuánto sale la unidad, cuánto stock hay y qué variantes ya están publicadas. No llama a OpenAI ni a MercadoLibre, así que responde en el acto y se puede pedir mientras el usuario escribe.',
+      'Lo que el panel necesita antes de armar el borrador: con cuántas unidades viene el empaque de Coresa, cuánto sale la unidad, cuánto stock hay y qué variantes ya están publicadas. No llama a OpenAI ni a MercadoLibre, así que responde en el acto y se puede pedir mientras el usuario escribe. Ojo con enCatalogoCoresa: cuando viene en false, Coresa ya no ofrece el SKU (su API no informa stock 0, saca el producto del catálogo), el stock se devuelve en 0 y el precio es el último conocido, no el vigente.',
   })
   @ApiParam({ name: 'sku', example: 'JDAC1345' })
   @ApiOkResponse({ description: 'Datos del SKU' })

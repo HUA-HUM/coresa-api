@@ -59,6 +59,15 @@ export class CoresaSkuInfo {
   unidadesSugeridas: number;
   /** Si Coresa marca el producto como vendible por unidad. */
   ventaUnitaria: boolean;
+  /**
+   * Si Coresa todavía ofrece el SKU.
+   *
+   * Importa porque la API de Coresa no devuelve los productos sin stock: los
+   * saca del catálogo en lugar de informarlos en 0. Cuando esto viene en
+   * false, el precio y el empaque de esta respuesta son los últimos que
+   * Coresa informó, no los de hoy, y el SKU no se puede publicar.
+   */
+  enCatalogoCoresa: boolean;
   variantesPublicadas: CoresaProductInMercadoLibre[];
 }
 
@@ -104,7 +113,20 @@ export class GetCoresaSkuInfo {
     const { empaque, empaqueOrigen } = empaqueDe(intermedia, master);
 
     const precioEmpaque = Math.round(toNumber(stored.Precio_Convertido));
-    const disponible = Math.floor(toNumber(stored.Disponible));
+
+    // La API de Coresa no manda los productos sin stock: los saca del
+    // catálogo. Que el SKU no esté no es "no hay novedades", es "se terminó".
+    //
+    // Y el sync solo hace upsert: lo que no llega en la corrida, no se toca.
+    // Entonces la fila de coresa_products se queda con el último stock que
+    // Coresa informó y lo repite para siempre, porque el dato que la
+    // corregiría ya nunca va a llegar. En noviembre de 2026 el panel ofrecía
+    // 40 unidades de NXL-63 2P 40A 30mA A 6kA que Coresa no tenía hacía
+    // semanas. Acá se corta: si no está en el catálogo, no hay stock.
+    const enCatalogoCoresa = Boolean(product);
+    const disponible = enCatalogoCoresa
+      ? Math.floor(toNumber(stored.Disponible))
+      : 0;
     // base_units es a cuántas unidades corresponde Precio_Convertido, y no es
     // lo mismo que el empaque: cuando Coresa no manda intermedia, el precio es
     // por unidad y la caja es la master.
@@ -127,6 +149,7 @@ export class GetCoresaSkuInfo {
       empaquesDisponibles: Math.floor(disponible / empaque),
       unidadesSugeridas: empaque,
       ventaUnitaria: Boolean(product?.Venta_Unitaria ?? stored.Venta_Unitaria),
+      enCatalogoCoresa,
       variantesPublicadas: variantes,
     };
   }
