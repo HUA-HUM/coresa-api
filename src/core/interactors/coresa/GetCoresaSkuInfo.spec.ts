@@ -177,3 +177,38 @@ describe('GetCoresaSkuInfo, empaque sin intermedia', () => {
     expect(info.precioUnitario).toBe(39677);
   });
 });
+
+describe('GetCoresaSkuInfo, SKU que Coresa ya no ofrece', () => {
+  // La API de Coresa no informa los productos sin stock en 0: los saca del
+  // catálogo. Y el sync solo hace upsert, así que la fila guardada se queda
+  // con el último stock informado para siempre.
+  it('no repite el último stock conocido: informa 0', async () => {
+    const { interactor } = build({}, null as never);
+
+    const info = await interactor.execute('JDAC1345');
+
+    expect(info.enCatalogoCoresa).toBe(false);
+    expect(info.disponible).toBe(0);
+    expect(info.empaquesDisponibles).toBe(0);
+  });
+
+  it('igual muestra el precio, para que el panel pueda explicar qué pasó', async () => {
+    const { interactor } = build({}, null as never);
+
+    const info = await interactor.execute('JDAC1345');
+
+    // Es el último precio que informó Coresa, no el de hoy: el flag es lo que
+    // le avisa al panel que no lo tome como vigente.
+    expect(info.precioEmpaque).toBe(84771);
+    expect(info.precioUnitario).toBe(848);
+  });
+
+  it('un SKU vigente queda marcado como vigente', async () => {
+    const { interactor } = build();
+
+    const info = await interactor.execute('JDAC1345');
+
+    expect(info.enCatalogoCoresa).toBe(true);
+    expect(info.disponible).toBe(28405);
+  });
+});

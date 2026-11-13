@@ -25,6 +25,8 @@ export class ProductsCoresaController {
   @ApiOperation({
     summary:
       'Catálogo Coresa completo → precio de pack en pesos y stock total → upsert coresa_products',
+    description:
+      'Además del upsert, da de baja lo que Coresa dejó de ofrecer: su API no informa los productos sin stock en 0, los saca del catálogo, así que lo que no vino en la corrida se pone en stock 0 para que el actualizador lo baje en ML. Ese barrido no corre si la corrida vino más corta que CORESA_MIN_CATALOG_SIZE ni si daría de baja más de CORESA_MAX_DISCONTINUED SKUs: en esos casos la respuesta trae discontinued en null y discontinuedReason con el motivo.',
   })
   @ApiOkResponse({ description: 'Catálogo sincronizado' })
   async sync() {

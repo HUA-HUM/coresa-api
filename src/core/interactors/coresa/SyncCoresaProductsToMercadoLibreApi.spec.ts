@@ -56,6 +56,7 @@ describe('SyncCoresaProductsToMercadoLibreApi', () => {
   ): IInternalApiRepository {
     return {
       upsertCoresaProducts: jest.fn(),
+      markCoresaProductsUnavailable: jest.fn().mockResolvedValue(null),
       listCoresaProductsInMercadoLibre: jest.fn().mockResolvedValue([]),
       getCoresaProductBySku: jest.fn().mockResolvedValue(desired),
       listVariantsBySku: jest.fn().mockResolvedValue([]),

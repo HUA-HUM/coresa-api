@@ -73,3 +73,71 @@ export class CoresaProduct {
   URL_Imagen?: string;
   Certificado?: string;
 }
+
+/**
+ * Lo que informa el barrido de discontinuados.
+ *
+ * La API de Coresa no manda los productos sin stock en 0: los saca del
+ * catálogo. Y el sync solo hace upsert, así que lo que no vino en la corrida
+ * se queda con el último stock informado para siempre. El barrido cierra ese
+ * círculo: pone en 0 lo que no quedó marcado con el id de la corrida.
+ */
+export class CoresaDiscontinuedSweep {
+  /** Cuántas filas quedaron en 0. */
+  updated: number;
+  /** Si el servidor frenó el barrido por superar el tope. */
+  refused: boolean;
+  /** Cuántas habría puesto en 0. Viene cuando lo frenó el tope. */
+  wouldUpdate: number | null;
+  /** Los SKUs que se dieron de baja, para poder revisarlos. */
+  skus: string[];
+}
+
+/**
+ * Lee la respuesta del barrido sin atarse a una sola forma: internal-api
+ * mezcla camelCase y snake_case, y a veces envuelve en { data }.
+ *
+ * Si el servidor frenó el barrido, lo dice con refused/skipped o simplemente
+ * no actualizando nada pero informando cuántas habría tocado. Las dos formas
+ * se leen igual acá.
+ */
+export function mapDiscontinuedSweep(
+  payload: unknown,
+): CoresaDiscontinuedSweep {
+  const root =
+    payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+  const body =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root;
+
+  const num = (...keys: string[]): number | null => {
+    for (const key of keys) {
+      const value = Number(body[key]);
+      if (body[key] !== undefined && body[key] !== null && !isNaN(value)) {
+        return value;
+      }
+    }
+    return null;
+  };
+
+  const updated = num('updated', 'affected', 'count') ?? 0;
+  const wouldUpdate = num('would_update', 'wouldUpdate', 'pending');
+  const flagged = Boolean(
+    body.refused ?? body.skipped ?? body.aborted ?? false,
+  );
+  const skus = Array.isArray(body.skus)
+    ? body.skus.map((sku) => String(sku))
+    : [];
+
+  return {
+    updated,
+    // Que informe cuántas habría tocado y no haya tocado ninguna es la otra
+    // manera de decir "lo frené": se toma como freno igual.
+    refused: flagged || (updated === 0 && (wouldUpdate ?? 0) > 0),
+    wouldUpdate,
+    skus,
+  };
+}
