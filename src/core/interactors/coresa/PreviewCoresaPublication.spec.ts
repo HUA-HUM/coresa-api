@@ -74,6 +74,7 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
   };
   const internalApi = {
     upsertCoresaProducts: jest.fn(),
+    markCoresaProductsUnavailable: jest.fn().mockResolvedValue(null),
     listCoresaProductsInMercadoLibre: jest.fn(),
     getCoresaProductBySku: jest.fn().mockResolvedValue({
       SKU: 'PC12NW',

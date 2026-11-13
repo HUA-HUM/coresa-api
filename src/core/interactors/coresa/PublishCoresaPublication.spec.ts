@@ -17,6 +17,7 @@ const draft: PublicationDraft = {
 function buildInternalApi() {
   return {
     upsertCoresaProducts: jest.fn(),
+    markCoresaProductsUnavailable: jest.fn().mockResolvedValue(null),
     listCoresaProductsInMercadoLibre: jest.fn(),
     getCoresaProductBySku: jest.fn(),
     getMercadoLibreProductByMla: jest.fn(),

@@ -26,13 +26,13 @@ describe('APIInternalApiRepository', () => {
       Moneda: 'ARS',
     };
 
-    await repo.upsertCoresaProducts([product]);
+    await repo.upsertCoresaProducts([product], 'corrida-1');
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',
         url: 'https://internal.example.com/internal/coresa/products/bulk',
-        data: { products: [product] },
+        data: { products: [product], run_id: 'corrida-1' },
       }),
     );
     const config = (
@@ -48,7 +48,7 @@ describe('APIInternalApiRepository', () => {
     const repo = new APIInternalApiRepository({ request } as never);
     const products = Array.from({ length: 120 }, (_, i) => ({ SKU: `S${i}` }));
 
-    await repo.upsertCoresaProducts(products);
+    await repo.upsertCoresaProducts(products, 'corrida-1');
 
     // 120 productos en lotes de 50: tres pedidos, ninguno cerca del límite.
     expect(request).toHaveBeenCalledTimes(3);
@@ -67,7 +67,7 @@ describe('APIInternalApiRepository', () => {
     const repo = new APIInternalApiRepository({ request } as never);
     const products = Array.from({ length: 4 }, (_, i) => ({ SKU: `S${i}` }));
 
-    await repo.upsertCoresaProducts(products);
+    await repo.upsertCoresaProducts(products, 'corrida-1');
 
     // El de 4 vuelve 413 y se reintenta en dos de 2: se sincroniza igual en
     // vez de perder el catálogo entero.
@@ -84,16 +84,94 @@ describe('APIInternalApiRepository', () => {
       .mockResolvedValue({ status: 413, data: { message: 'too large' } });
     const repo = new APIInternalApiRepository({ request } as never);
 
-    await expect(repo.upsertCoresaProducts([{ SKU: 'S1' }])).rejects.toThrow(
-      /413/,
+    await expect(
+      repo.upsertCoresaProducts([{ SKU: 'S1' }], 'corrida-1'),
+    ).rejects.toThrow(/413/);
+  });
+
+  it('todos los lotes del catálogo van con el mismo id de corrida', async () => {
+    process.env.INTERNAL_API_CHUNK_SIZE = '2';
+    const request = jest.fn().mockResolvedValue({ status: 200, data: {} });
+    const repo = new APIInternalApiRepository({ request } as never);
+    const products = Array.from({ length: 6 }, (_, i) => ({ SKU: `S${i}` }));
+
+    await repo.upsertCoresaProducts(products, 'corrida-1');
+
+    // Si un lote fuera con otro id, el barrido daría de baja ese lote entero.
+    const ids = (
+      request.mock.calls as Array<[{ data: { run_id: string } }]>
+    ).map((call) => call[0].data.run_id);
+    expect(ids).toEqual(Array(3).fill('corrida-1'));
+  });
+
+  it('un lote partido por tamaño conserva el id de corrida', async () => {
+    process.env.INTERNAL_API_CHUNK_SIZE = '4';
+    const request = jest.fn(
+      (config: { data: { products: unknown[]; run_id: string } }) =>
+        config.data.products.length > 2
+          ? Promise.resolve({ status: 413, data: {} })
+          : Promise.resolve({ status: 200, data: {} }),
     );
+    const repo = new APIInternalApiRepository({ request } as never);
+    const products = Array.from({ length: 4 }, (_, i) => ({ SKU: `S${i}` }));
+
+    await repo.upsertCoresaProducts(products, 'corrida-1');
+
+    const ids = request.mock.calls.map((call) => call[0].data.run_id);
+    expect(ids).toEqual(['corrida-1', 'corrida-1', 'corrida-1']);
+  });
+
+  it('el barrido manda el id de corrida y el tope', async () => {
+    const request = jest.fn().mockResolvedValue({
+      status: 200,
+      data: { updated: 2, skus: ['A', 'B'] },
+    });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    const sweep = await repo.markCoresaProductsUnavailable('corrida-1', 500);
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'POST',
+        url: 'https://internal.example.com/internal/coresa/products/mark-unavailable',
+        data: { run_id: 'corrida-1', max_updates: 500 },
+      }),
+    );
+    expect(sweep).toEqual({
+      updated: 2,
+      refused: false,
+      wouldUpdate: null,
+      skus: ['A', 'B'],
+    });
+  });
+
+  it('un 404 del barrido es "todavía no existe", no un error', async () => {
+    // Se despliega antes que internal-api: el barrido se activa solo cuando
+    // ellos suban el endpoint.
+    const request = jest.fn().mockResolvedValue({ status: 404, data: {} });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(
+      repo.markCoresaProductsUnavailable('corrida-1', 500),
+    ).resolves.toBeNull();
+  });
+
+  it('cualquier otro error del barrido sí se propaga', async () => {
+    const request = jest
+      .fn()
+      .mockResolvedValue({ status: 500, data: { message: 'boom' } });
+    const repo = new APIInternalApiRepository({ request } as never);
+
+    await expect(
+      repo.markCoresaProductsUnavailable('corrida-1', 500),
+    ).rejects.toThrow(/500/);
   });
 
   it('no llama al bulk si no hay productos', async () => {
     const request = jest.fn();
     const repo = new APIInternalApiRepository({ request } as never);
 
-    await repo.upsertCoresaProducts([]);
+    await repo.upsertCoresaProducts([], 'corrida-1');
 
     expect(request).not.toHaveBeenCalled();
   });

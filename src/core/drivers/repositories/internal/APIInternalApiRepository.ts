@@ -1,6 +1,10 @@
 import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { CoresaProduct } from '../../../entities/CoresaProduct';
+import {
+  CoresaDiscontinuedSweep,
+  CoresaProduct,
+  mapDiscontinuedSweep,
+} from '../../../entities/CoresaProduct';
 import {
   FinancingCost,
   FinancingCostChanges,
@@ -153,12 +157,51 @@ export class APIInternalApiRepository {
     }
   }
 
-  async upsertCoresaProducts(products: CoresaProduct[]): Promise<void> {
+  async upsertCoresaProducts(
+    products: CoresaProduct[],
+    runId: string,
+  ): Promise<void> {
     if (products.length === 0) return;
 
     for (const batch of this.chunk(products, this.chunkSize)) {
-      await this.upsertBatch(batch);
+      await this.upsertBatch(batch, runId);
     }
+  }
+
+  /**
+   * El barrido de lo que Coresa dejó de ofrecer.
+   *
+   * Un 404 no es un error acá: internal-api todavía puede no tener el
+   * endpoint. Devolver null deja que el sync siga haciendo su trabajo y avise,
+   * en lugar de fallar entero por una pieza que no es suya. Cuando el endpoint
+   * exista, el barrido empieza a andar solo, sin tocar nada de este lado.
+   */
+  async markCoresaProductsUnavailable(
+    runId: string,
+    maxUpdates: number,
+  ): Promise<CoresaDiscontinuedSweep | null> {
+    const config = this.prepareRequest(
+      '/internal/coresa/products/mark-unavailable',
+      {},
+      { run_id: runId, max_updates: maxUpdates },
+    );
+
+    let response: Awaited<ReturnType<typeof this.request>>;
+    try {
+      response = await this.request(config);
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+      throw err;
+    }
+
+    if (response.status === 404) return null;
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `[internal-api] mark-unavailable -> ${response.status}: ${JSON.stringify(response.data)}`,
+      );
+    }
+
+    return mapDiscontinuedSweep(response.data);
   }
 
   /**
@@ -166,11 +209,16 @@ export class APIInternalApiRepository {
    * de perder la sincronización entera: el tamaño del producto depende de los
    * datos que mande Coresa y puede crecer sin aviso.
    */
-  private async upsertBatch(batch: CoresaProduct[]): Promise<void> {
+  private async upsertBatch(
+    batch: CoresaProduct[],
+    runId: string,
+  ): Promise<void> {
     const config = this.prepareRequest(
       '/internal/coresa/products/bulk',
       {},
-      { products: batch },
+      // run_id marca estas filas como vistas por esta corrida. Es lo que el
+      // barrido usa después para saber qué quedó afuera del catálogo.
+      { products: batch, run_id: runId },
     );
 
     let response: Awaited<ReturnType<typeof this.request>>;
@@ -178,13 +226,13 @@ export class APIInternalApiRepository {
       response = await this.request(config);
     } catch (err) {
       if (this.isTooLarge(err) && batch.length > 1) {
-        return this.splitAndRetry(batch);
+        return this.splitAndRetry(batch, runId);
       }
       throw err;
     }
 
     if (response.status === 413 && batch.length > 1) {
-      return this.splitAndRetry(batch);
+      return this.splitAndRetry(batch, runId);
     }
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
@@ -197,13 +245,16 @@ export class APIInternalApiRepository {
     return axios.isAxiosError(err) && err.response?.status === 413;
   }
 
-  private async splitAndRetry(batch: CoresaProduct[]): Promise<void> {
+  private async splitAndRetry(
+    batch: CoresaProduct[],
+    runId: string,
+  ): Promise<void> {
     const half = Math.ceil(batch.length / 2);
     this.logger.warn(
       `[internal-api] lote de ${batch.length} productos rechazado por tamaño, se parte en ${half}`,
     );
-    await this.upsertBatch(batch.slice(0, half));
-    await this.upsertBatch(batch.slice(half));
+    await this.upsertBatch(batch.slice(0, half), runId);
+    await this.upsertBatch(batch.slice(half), runId);
   }
 
   private readTotal(payload: unknown): number | null {
