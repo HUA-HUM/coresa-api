@@ -16,9 +16,49 @@ const FORMULA_1_BRANDS = new Set([
   'CHINT',
   'JADEVER',
   'DCK',
+  // Sumadas en noviembre de 2026, cuando aparecieron en el feed de Coresa:
+  // gabinetes eléctricos (FORLI), repuestos de motores (RONIN) y electrónica
+  // de consumo (NOAK). Van a la fórmula 1 porque es la que usan ocho de las
+  // nueve marcas; si comercial define otro margen para alguna, se cambia por
+  // CORESA_BRAND_FORMULAS sin tocar código.
+  'FORLI',
+  'RONIN',
+  'NOAK',
 ]);
 
 const FORMULA_3_BRANDS = new Set(['WEIDMULLER']);
+
+/**
+ * Override del margen por marca, sin deploy.
+ *
+ * El mapa de arriba está compilado, así que cada vez que Coresa agrega una
+ * marca el catálogo queda esperando una release. Y el margen no es una
+ * decisión técnica: lo define comercial, y puede cambiar después de ver los
+ * primeros precios. Con esto se corrige en el .env del droplet y un restart.
+ *
+ * Formato: `MARCA:formula` separados por coma, por ejemplo
+ * `CORESA_BRAND_FORMULAS=FORLI:3,NOAK:2`. La fórmula es 1, 2 o 3. Una marca
+ * acá gana sobre las listas compiladas.
+ */
+function brandFormulaOverrides(): Map<string, PricingFormula> {
+  const raw = process.env.CORESA_BRAND_FORMULAS;
+  const overrides = new Map<string, PricingFormula>();
+  if (!raw) return overrides;
+
+  for (const entry of raw.split(',')) {
+    const [rawBrand, rawFormula] = entry.split(':');
+    const brand = normalizeBrand(rawBrand);
+    const formula = Number(String(rawFormula ?? '').trim());
+
+    // Una entrada mal escrita se ignora en vez de tumbar el sync entero: el
+    // resto del override sigue valiendo y la marca cae en su lista compilada.
+    if (!brand || ![1, 2, 3].includes(formula)) continue;
+
+    overrides.set(brand, formula as PricingFormula);
+  }
+
+  return overrides;
+}
 
 export function scalarToString(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -81,6 +121,10 @@ export function marginForFormula(formula: PricingFormula): number {
 export function formulaForBrand(marca: unknown): PricingFormula | null {
   const brand = normalizeBrand(marca);
   if (!brand) return null;
+
+  const override = brandFormulaOverrides().get(brand);
+  if (override !== undefined) return override;
+
   if (FORMULA_1_BRANDS.has(brand)) return 1;
   if (FORMULA_3_BRANDS.has(brand)) return 3;
   return null;

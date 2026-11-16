@@ -50,12 +50,70 @@ describe('coresaPriceStock', () => {
       expect(marginForFormula(1)).toBe(FORMULA_1_MARGIN);
     });
 
+    // Aparecieron en el feed de Coresa en noviembre de 2026: 316 productos de
+    // FORLI, 96 de RONIN y 52 de NOAK que el sync salteaba por no tener
+    // margen asignado, asi que no llegaban al publicador.
+    it('cotiza las marcas nuevas: FORLI, RONIN y NOAK', () => {
+      expect(formulaForBrand('FORLI')).toBe(1);
+      expect(formulaForBrand(' ronin ')).toBe(1);
+      expect(formulaForBrand('Noak')).toBe(1);
+    });
+
     it('deja la fórmula 2 mapeada y aplica la 3 solo a Wadermuller', () => {
       expect(marginForFormula(2)).toBe(FORMULA_2_MARGIN);
       expect(formulaForBrand('Weidmuller')).toBe(3);
       expect(marginForFormula(3)).toBe(FORMULA_3_MARGIN);
       expect(formulaForBrand('Otra')).toBeNull();
       expect(formulaForBrand('')).toBeNull();
+    });
+  });
+
+  // El margen lo define comercial, no el codigo, y puede cambiar despues de
+  // ver los primeros precios. Sin esto, cada correccion es una release.
+  describe('formulaForBrand con CORESA_BRAND_FORMULAS', () => {
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env.CORESA_BRAND_FORMULAS;
+    });
+
+    it('el override le gana a la lista compilada', () => {
+      process.env.CORESA_BRAND_FORMULAS = 'FORLI:3';
+
+      expect(formulaForBrand('FORLI')).toBe(3);
+      expect(marginForFormula(formulaForBrand('FORLI')!)).toBe(
+        FORMULA_3_MARGIN,
+      );
+      // Las demas no se tocan.
+      expect(formulaForBrand('RONIN')).toBe(1);
+    });
+
+    it('acepta varias marcas y no distingue mayusculas ni espacios', () => {
+      process.env.CORESA_BRAND_FORMULAS = ' forli:3 , noak:2 ';
+
+      expect(formulaForBrand('FORLI')).toBe(3);
+      expect(formulaForBrand('NOAK')).toBe(2);
+    });
+
+    it('da de alta una marca que no esta en ninguna lista', () => {
+      process.env.CORESA_BRAND_FORMULAS = 'MARCANUEVA:1';
+
+      expect(formulaForBrand('MarcaNueva')).toBe(1);
+    });
+
+    it('una entrada mal escrita se ignora y el resto sigue valiendo', () => {
+      process.env.CORESA_BRAND_FORMULAS = 'FORLI:9,NOAK:,:2,RONIN:3';
+
+      // Formula invalida: cae en su lista compilada.
+      expect(formulaForBrand('FORLI')).toBe(1);
+      expect(formulaForBrand('NOAK')).toBe(1);
+      // La entrada valida del final igual se aplica.
+      expect(formulaForBrand('RONIN')).toBe(3);
+    });
+
+    it('sin la variable, todo queda como esta compilado', () => {
+      expect(formulaForBrand('FORLI')).toBe(1);
+      expect(formulaForBrand('WEIDMULLER')).toBe(3);
+      expect(formulaForBrand('Otra')).toBeNull();
     });
   });
 
